@@ -1,0 +1,162 @@
+# PhishGuard
+
+PhishGuard is a phishing website detection platform powered by XGBoost. It provides this real-time scan workflow:
+
+URL Input -> Feature Extraction -> XGBoost Prediction -> SHAP Explanation -> Result Dashboard
+
+## Stack
+
+- React + Tailwind frontend
+- FastAPI backend
+- PostgreSQL in Docker deployment
+- SQLite fallback for quick local development
+- XGBoost as the primary prediction engine
+- SHAP explainable AI
+
+## Project Structure
+
+```text
+backend/app/                  FastAPI application, database, API, prediction service
+backend/app/services/         URL feature engineering and XGBoost prediction logic
+backend/ml/train.py           XGBoost training pipeline
+backend/ml/data/              Optional real training CSV files
+backend/ml/artifacts/         Saved model, scaler, columns, and metrics
+frontend/src/                 React + Tailwind user interface
+tests/                        Backend feature and API tests
+Dockerfile                    Full-stack application image
+docker-compose.yml            App + PostgreSQL deployment
+```
+
+## Run Locally
+
+Double-click:
+
+```text
+run_windows.bat
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8000
+```
+
+API docs:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+## Train Demo Model
+
+The demo model is useful for local testing when real datasets are not available yet.
+
+```bash
+python -m backend.ml.train --demo
+```
+
+## Real Dataset Training
+
+Phishing sources:
+
+- PhishTank: `python -m backend.ml.train --download-phishtank`
+- Phishing.Database: `python -m backend.ml.train --download-phishing-database`
+- OpenPhish: `python -m backend.ml.train --download-openphish`
+- UCI dataset: place CSV at `backend/ml/data/uci_phishing_urls.csv`
+- Kaggle URL dataset: place CSV at `backend/ml/data/kaggle_phishing_urls.csv`
+
+Legitimate source:
+
+- generate a curated seed: `python -m backend.ml.train --build-legitimate-seed --download-only`
+- or place CSV at `backend/ml/data/legitimate_urls.csv`
+
+Every CSV must contain:
+
+```csv
+url,label
+https://example.com,0
+http://phishing-example.test,1
+```
+
+Notes:
+
+- Label `1` means phishing.
+- Label `0` means legitimate.
+- The training code uses all available rows by default and applies XGBoost class weighting for imbalanced data.
+- Add `--balance` only if you explicitly want equal class downsampling.
+- Add `--tune` to run RandomizedSearchCV hyperparameter tuning.
+- The saved XGBoost artifacts replace the previous model in `backend/ml/artifacts`.
+- Real phishing feed files can trigger endpoint protection alerts because they contain malicious URL strings. That is expected for cybersecurity dataset work; keep the files inside the project training folder and do not execute anything from the dataset.
+
+Then train:
+
+```bash
+python -m backend.ml.train --balance --cv-folds 3
+```
+
+The generated metrics file records accuracy, precision, recall, F1 score, cross-validation F1, confusion matrix, dataset size, feature count, and training sources.
+
+Current checked-in local training status:
+
+```text
+mode: real
+sources: Phishing.Database 789,052 rows + OpenPhish 300 rows + legitimate URL dataset 50,000 rows
+training/evaluation sample: 99,994 balanced URLs
+split: 80:20 stratified
+cross_validation_folds: 3
+selected_threshold: 0.22
+accuracy: 0.9206
+precision: 0.896
+recall: 0.9517
+f1_score: 0.923
+cv_f1_mean: 0.9348
+prediction_ms_per_url: 0.0018
+```
+
+Phishing recall is intentionally prioritized because false negatives are dangerous in phishing detection. PhishTank download support is implemented, but the public feed can return HTTP 429 rate limiting without an application key. To train with as much PhishTank data as possible, register a PhishTank application key, set it before training, and run:
+
+```powershell
+$env:PHISHTANK_APP_KEY="your_phishtank_key"
+$env:PYTHONPATH=(Get-Location).Path
+python -m backend.ml.train --download-phishtank --download-only
+python -m backend.ml.train --tune --cv-folds 3
+```
+
+If you manually download the PhishTank database, import it with:
+
+```powershell
+python -m backend.ml.train --phishtank-file C:\path\to\online-valid.csv.bz2 --download-only
+python -m backend.ml.train --tune --cv-folds 3
+```
+
+## Docker Deployment
+
+```bash
+docker compose up --build
+```
+
+Open:
+
+```text
+http://127.0.0.1:8000
+```
+
+## API Documentation
+
+When the server is running:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+## Environment Variables
+
+```text
+DATABASE_URL=postgresql+psycopg2://phishguard:phishguard_password@postgres:5432/phishguard
+ENABLE_SHAP=false
+ENABLE_NETWORK_INTEL=false
+CORS_ORIGINS=http://127.0.0.1:8000,http://localhost:8000
+PHISHTANK_APP_KEY=optional_phishtank_application_key
+```
+
+`ENABLE_NETWORK_INTEL=true` enables live DNS/WHOIS checks. Keep it disabled for the fastest scan response.

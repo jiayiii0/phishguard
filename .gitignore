@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Local runtime data
+*.db
+*.sqlite
+*.sqlite3
+
+# Raw training datasets can be large and may contain live phishing URLs.
+backend/ml/data/*.csv
+backend/ml/data/*.txt
+backend/ml/data/*.gz
+backend/ml/data/*.bz2
+backend/ml/data/*.zip
+!backend/ml/data/.gitkeep
+
+# Keep canonical trained model artifacts under backend/ml/artifacts.
+/ml/
+
+# Frontend dependencies/build output
+frontend/node_modules/
+frontend/dist/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
