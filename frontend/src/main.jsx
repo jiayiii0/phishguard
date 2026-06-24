@@ -115,16 +115,19 @@ function CyberVisual() {
     [58, 22], [72, 35], [66, 54], [83, 61], [48, 69], [34, 48], [42, 30],
   ];
   return (
-    <div className="relative mx-auto hidden min-h-[420px] max-w-lg lg:block">
-      <div className="cyber-grid absolute inset-0 rounded-lg border border-white/10" />
+    <div className="relative hidden min-h-[520px] w-full overflow-hidden rounded-lg lg:flex lg:items-center lg:justify-center">
+      <div className="cyber-grid absolute inset-3 rounded-lg border border-white/10" />
+      <div className="hero-visual-sweep absolute inset-0" />
+      <div className="hero-orbit absolute left-1/2 top-1/2 h-[420px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full" />
       <motion.div
-        className="absolute left-1/2 top-1/2 grid h-44 w-44 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-lg border border-cyan-200/30 bg-cyan-200/10 shadow-[0_0_80px_rgba(34,211,238,.22)] backdrop-blur-md"
+        className="relative z-10 grid h-60 w-60 place-items-center rounded-lg border border-cyan-200/30 bg-cyan-200/10 shadow-[0_0_110px_rgba(34,211,238,.28)] backdrop-blur-md xl:h-72 xl:w-72"
         animate={{ y: [-8, 8, -8], rotate: [0, 1.5, 0] }}
         transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
       >
-        <Shield size={86} className="text-cyan-100 drop-shadow-[0_0_18px_rgba(34,211,238,.7)]" />
-        <div className="absolute inset-4 rounded-lg border border-cyan-200/20" />
-        <div className="absolute h-px w-56 bg-gradient-to-r from-transparent via-cyan-200 to-transparent" />
+        <Shield size={112} className="text-cyan-100 drop-shadow-[0_0_18px_rgba(34,211,238,.7)] xl:h-36 xl:w-36" />
+        <div className="absolute inset-5 rounded-lg border border-cyan-200/20" />
+        <div className="absolute h-px w-80 bg-gradient-to-r from-transparent via-cyan-200 to-transparent" />
+        <div className="absolute h-80 w-px bg-gradient-to-b from-transparent via-cyan-200/60 to-transparent" />
       </motion.div>
       <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
         {nodes.slice(1).map((point, index) => (
@@ -134,9 +137,13 @@ function CyberVisual() {
           <circle key={`${point[0]}-${point[1]}`} cx={point[0]} cy={point[1]} r="1.3" fill="rgba(125,249,255,.85)" />
         ))}
       </svg>
-      <div className="absolute bottom-8 left-8 rounded-lg border border-white/10 bg-white/10 px-4 py-3 text-sm text-slate-200 backdrop-blur-xl">
+      <div className="absolute bottom-10 left-10 z-20 rounded-lg border border-white/10 bg-white/10 px-4 py-3 text-sm text-slate-200 backdrop-blur-xl">
         <div className="font-bold text-cyan-100">Threat graph active</div>
         <div className="mt-1 text-xs text-slate-400">URL intelligence nodes synchronized</div>
+      </div>
+      <div className="absolute right-8 top-10 z-20 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-50 backdrop-blur-xl">
+        <div className="font-black">XGBoost engine</div>
+        <div className="mt-1 text-xs text-cyan-100/70">real-time scoring</div>
       </div>
     </div>
   );
@@ -211,12 +218,12 @@ function Hero({ onResult, result }) {
     <section className="relative overflow-hidden px-5 py-12 md:py-16">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(56,189,248,.22),transparent_34%),linear-gradient(135deg,rgba(29,78,216,.18),transparent_40%)]" />
       <div className="cyber-background absolute inset-0 opacity-70" />
-      <div className="relative mx-auto grid max-w-7xl items-center gap-10 lg:grid-cols-[1.05fr_.95fr]">
+      <div className="relative mx-auto grid max-w-7xl items-center gap-8 lg:grid-cols-[.95fr_1.05fr] xl:gap-10">
         <div>
           <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="inline-flex items-center gap-2 rounded-lg border border-cyan-300/25 bg-cyan-300/10 px-3 py-2 text-sm font-bold text-cyan-100">
             <Sparkles size={16} /> Enterprise URL Intelligence
           </motion.div>
-          <motion.h1 initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="mt-6 max-w-4xl text-5xl font-black leading-[1.02] text-white md:text-7xl">
+          <motion.h1 initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="mt-6 max-w-4xl text-5xl font-black leading-[1.02] text-white md:text-6xl xl:text-7xl">
             Detect Phishing Before It Strikes
           </motion.h1>
           <motion.p initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mt-5 max-w-3xl text-lg font-medium leading-8 text-slate-300 md:text-xl">
@@ -244,7 +251,7 @@ function StatusTile({ icon, label, value, detail, color = "#67e8f9" }) {
         <span>{label}</span>
         <span style={{ color }}>{React.cloneElement(icon, { size: 18 })}</span>
       </div>
-      <div className="mt-3 truncate text-2xl font-black text-white">{value}</div>
+      <div className="mt-3 break-words text-xl font-black leading-tight text-white xl:text-2xl">{value}</div>
       <div className="mt-1 text-xs font-semibold text-slate-500">{detail}</div>
     </div>
   );

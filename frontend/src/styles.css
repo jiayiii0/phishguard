@@ -63,6 +63,47 @@ body::before {
   background-size: 32px 32px, 32px 32px, 100% 100%;
 }
 
+.hero-orbit {
+  border: 1px solid rgba(103, 232, 249, .14);
+  background:
+    radial-gradient(circle at center, rgba(34, 211, 238, .18), transparent 38%),
+    conic-gradient(from 90deg, transparent, rgba(103, 232, 249, .2), transparent 36%, transparent 100%);
+  box-shadow: 0 0 120px rgba(14, 165, 233, .16);
+  animation: orbit-spin 18s linear infinite;
+}
+
+.hero-orbit::before,
+.hero-orbit::after {
+  content: "";
+  position: absolute;
+  inset: 48px;
+  border-radius: 999px;
+  border: 1px solid rgba(125, 211, 252, .13);
+}
+
+.hero-orbit::after {
+  inset: 104px;
+  border-color: rgba(34, 211, 238, .2);
+}
+
+.hero-visual-sweep {
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.hero-visual-sweep::after {
+  content: "";
+  position: absolute;
+  top: 8%;
+  bottom: 8%;
+  left: -20%;
+  width: 22%;
+  background: linear-gradient(90deg, transparent, rgba(34, 211, 238, .18), rgba(59, 130, 246, .08), transparent);
+  filter: blur(1px);
+  transform: skewX(-16deg);
+  animation: hero-scan 4.8s ease-in-out infinite;
+}
+
 .scan-line {
   pointer-events: none;
   position: absolute;
@@ -87,5 +128,20 @@ body::before {
   }
   58%, 100% {
     transform: translateX(520%);
+  }
+}
+
+@keyframes hero-scan {
+  0% {
+    transform: translateX(0) skewX(-16deg);
+  }
+  62%, 100% {
+    transform: translateX(620%) skewX(-16deg);
+  }
+}
+
+@keyframes orbit-spin {
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
   }
 }
