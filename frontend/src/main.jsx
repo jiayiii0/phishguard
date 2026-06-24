@@ -55,6 +55,13 @@ const featureCards = [
   { icon: <History />, title: "Detection History", text: "Stores scans for dashboard analysis, filtering, and audit review." },
 ];
 
+const sampleUrls = [
+  { label: "Safe Site", url: "https://www.google.com" },
+  { label: "Shortened Alert", url: "http://bit.ly/paypal-login-alert" },
+  { label: "Fake Login", url: "http://secure-paypal-login.example.com/verify-account" },
+  { label: "IP URL", url: "http://185.199.108.153/login/verify" },
+];
+
 function formatNumber(value) {
   if (value === undefined || value === null) return "0";
   return new Intl.NumberFormat().format(value);
@@ -70,6 +77,16 @@ function severityFromScore(score, isPhishing = false) {
 
 function cleanFeatureName(name) {
   return String(name || "").replaceAll("_", " ");
+}
+
+function resultNarrative(result) {
+  if (!result) return "";
+  const primaryReasons = result.indicators?.slice(0, 3).join(", ");
+  const scoreLine = `Risk score ${result.risk_score}/100 with ${result.confidence}% confidence.`;
+  if (result.is_phishing) {
+    return `${scoreLine} PhishGuard marked this URL as ${result.threat_level.toLowerCase()} because ${primaryReasons || "the XGBoost model detected URL patterns commonly found in phishing links"}. Treat this link as unsafe unless it is verified through a trusted source.`;
+  }
+  return `${scoreLine} PhishGuard did not find strong phishing indicators in the URL structure. This is a low-risk result, but users should still avoid entering passwords or payment details unless they trust the website.`;
 }
 
 function exportJson(filename, data) {
@@ -207,6 +224,21 @@ function Scanner({ onResult }) {
           <span key={tag} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">{tag}</span>
         ))}
       </div>
+      <div className="relative z-10 mt-4 border-t border-white/10 pt-4">
+        <div className="text-xs font-black uppercase tracking-[.16em] text-slate-500">Try a sample</div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {sampleUrls.map((sample) => (
+            <button
+              key={sample.label}
+              type="button"
+              onClick={() => setUrl(sample.url)}
+              className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-black text-cyan-100 transition hover:bg-cyan-300/20"
+            >
+              {sample.label}
+            </button>
+          ))}
+        </div>
+      </div>
       {error && <div className="relative z-10 mt-4 rounded-lg border border-rose-400/35 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-100">{error}</div>}
     </motion.section>
   );
@@ -298,6 +330,9 @@ function ResultPanel({ result }) {
         </div>
         <div className="mt-6">
           <h3 className="text-lg font-black text-white">Detection Summary</h3>
+          <div className="mt-3 rounded-lg border border-cyan-300/20 bg-cyan-300/10 p-4 text-sm font-semibold leading-6 text-cyan-50">
+            {resultNarrative(result)}
+          </div>
           <div className="mt-3 grid gap-2">
             {(result.indicators.length ? result.indicators : ["No high-risk URL indicator was detected."]).map((item) => (
               <div key={item} className="rounded-lg border border-white/10 bg-white/[.04] px-4 py-3 text-sm font-semibold text-slate-300">
@@ -458,6 +493,73 @@ function EvidenceStat({ label, value }) {
   );
 }
 
+function ModelCard({ metrics }) {
+  return (
+    <section className="mx-auto mt-14 max-w-7xl px-5">
+      <SectionHeading
+        eyebrow="Model Card"
+        title="Transparent machine learning boundaries"
+        text="A compact model card helps users and evaluators understand what the detector is designed to do, what evidence supports it, and where human caution is still required."
+      />
+      <div className="mt-7 grid gap-4 lg:grid-cols-3">
+        <div className="glass-panel rounded-lg p-5">
+          <div className="mb-4 grid h-11 w-11 place-items-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
+            <BrainCircuit size={22} />
+          </div>
+          <h3 className="text-lg font-black text-white">Intended Use</h3>
+          <p className="mt-3 text-sm leading-6 text-slate-400">
+            Classify public website URLs for phishing risk before users open links or submit sensitive information.
+          </p>
+          <div className="mt-4 rounded-lg border border-white/10 bg-black/20 p-3 text-sm font-bold text-slate-300">
+            Primary engine: {metrics?.algorithm || "XGBoost"}
+          </div>
+        </div>
+        <div className="glass-panel rounded-lg p-5">
+          <div className="mb-4 grid h-11 w-11 place-items-center rounded-lg border border-emerald-300/20 bg-emerald-300/10 text-emerald-100">
+            <Gauge size={22} />
+          </div>
+          <h3 className="text-lg font-black text-white">Evaluation Snapshot</h3>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <EvidenceStat label="URLs" value={formatNumber(metrics?.dataset_size)} />
+            <EvidenceStat label="Features" value={metrics?.feature_count || 0} />
+            <EvidenceStat label="Recall" value={metrics?.recall ?? "--"} />
+            <EvidenceStat label="F1 Score" value={metrics?.f1_score ?? "--"} />
+          </div>
+        </div>
+        <div className="glass-panel rounded-lg p-5">
+          <div className="mb-4 grid h-11 w-11 place-items-center rounded-lg border border-amber-300/20 bg-amber-300/10 text-amber-100">
+            <AlertTriangle size={22} />
+          </div>
+          <h3 className="text-lg font-black text-white">Known Limits</h3>
+          <ul className="mt-3 space-y-3 text-sm leading-6 text-slate-400">
+            <li>New phishing campaigns may appear before public datasets include them.</li>
+            <li>URL-only scanning does not inspect full webpage content by default.</li>
+            <li>High-risk decisions should be verified before blocking business-critical links.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PrivacyNotice() {
+  return (
+    <section className="mx-auto mt-14 max-w-7xl px-5">
+      <div className="glass-panel grid gap-5 rounded-lg p-6 md:grid-cols-[auto_1fr] md:items-center">
+        <div className="grid h-14 w-14 place-items-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
+          <Lock size={26} />
+        </div>
+        <div>
+          <h2 className="text-2xl font-black text-white">Privacy-first scanning</h2>
+          <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">
+            PhishGuard stores submitted URLs only for local scan history and dashboard analytics. It does not ask for passwords, payment details, browser cookies, or account tokens. Avoid submitting private reset links or URLs containing sensitive access keys.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Dashboard({ stats, onClear }) {
   const [filter, setFilter] = useState("All");
   const riskData = useMemo(() => [
@@ -581,6 +683,8 @@ function App() {
         <ResultPanel result={result} />
         <Features />
         <ModelEvidence metrics={stats?.model_metrics || {}} />
+        <ModelCard metrics={stats?.model_metrics || {}} />
+        <PrivacyNotice />
         <Dashboard stats={stats} onClear={clearHistory} />
       </main>
     </div>
