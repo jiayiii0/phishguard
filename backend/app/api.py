@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ipaddress
+from urllib.parse import urlparse
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +12,7 @@ from .config import get_settings
 from .database import get_db
 from .models import ScanRecord
 from .schemas import DashboardStats, ScanHistoryItem, ScanRequest, ScanResponse
+from .services.features import normalize_url
 from .services.predictor import PhishGuardPredictor
 
 
@@ -34,6 +37,27 @@ def model_metrics() -> dict:
     return {}
 
 
+def validate_public_url(raw_url: str) -> None:
+    lowered = (raw_url or "").strip().lower()
+    if lowered.startswith(("file://", "ftp://", "javascript:", "data:")):
+        raise HTTPException(status_code=400, detail="Only public HTTP and HTTPS URLs can be scanned.")
+    parsed = urlparse(normalize_url(raw_url))
+    if parsed.scheme not in {"http", "https"}:
+        raise HTTPException(status_code=400, detail="Only HTTP and HTTPS URLs can be scanned.")
+    hostname = (parsed.hostname or "").strip().lower()
+    if not hostname:
+        raise HTTPException(status_code=400, detail="A valid hostname is required.")
+    blocked_hosts = {"localhost", "0.0.0.0"}
+    if hostname in blocked_hosts or hostname.endswith(".localhost") or hostname.endswith(".local"):
+        raise HTTPException(status_code=400, detail="Local or internal network URLs are blocked.")
+    try:
+        address = ipaddress.ip_address(hostname)
+        if address.is_private or address.is_loopback or address.is_link_local or address.is_reserved or address.is_multicast:
+            raise HTTPException(status_code=400, detail="Private, local, or reserved IP addresses are blocked.")
+    except ValueError:
+        return
+
+
 @router.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "engine": "XGBoost"}
@@ -41,6 +65,7 @@ def health() -> dict[str, str]:
 
 @router.post("/scan", response_model=ScanResponse)
 def scan_url(payload: ScanRequest, db: Session = Depends(get_db)) -> dict:
+    validate_public_url(payload.url)
     try:
         result = get_predictor().predict(payload.url)
     except Exception as exc:
@@ -65,6 +90,13 @@ def scan_url(payload: ScanRequest, db: Session = Depends(get_db)) -> dict:
 @router.get("/history", response_model=list[ScanHistoryItem])
 def history(db: Session = Depends(get_db), limit: int = 20) -> list[ScanRecord]:
     return db.query(ScanRecord).order_by(ScanRecord.created_at.desc()).limit(min(limit, 100)).all()
+
+
+@router.delete("/history")
+def clear_history(db: Session = Depends(get_db)) -> dict[str, int]:
+    deleted = db.query(ScanRecord).delete()
+    db.commit()
+    return {"deleted": deleted}
 
 
 @router.get("/dashboard", response_model=DashboardStats)

@@ -12,6 +12,18 @@ from ..config import get_settings
 from .features import explain_indicators, extract_features, hostname_from_url, normalize_url
 
 
+def threat_level(score: int, is_phishing: bool) -> str:
+    if is_phishing and score >= 85:
+        return "Phishing"
+    if score >= 70:
+        return "High Risk"
+    if score >= 45:
+        return "Suspicious"
+    if score >= 20:
+        return "Low Risk"
+    return "Safe"
+
+
 class PhishGuardPredictor:
     def __init__(self) -> None:
         self.settings = get_settings()
@@ -130,6 +142,7 @@ class PhishGuardPredictor:
             "hostname": hostname_from_url(normalized),
             "result": "Phishing" if is_phishing else "Safe",
             "is_phishing": bool(is_phishing),
+            "threat_level": threat_level(risk_score, bool(is_phishing)),
             "risk_score": risk_score,
             "confidence": round(confidence * 100, 2),
             "indicators": indicators,

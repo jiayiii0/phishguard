@@ -342,6 +342,14 @@ def train(demo: bool = False, tune: bool = False, balance: bool = False, cv_fold
     selected = max(high_recall_scores or threshold_scores, key=lambda score: (score["f1"], score["precision"]))
     selected_threshold = float(selected["threshold"])
     predictions = (probabilities >= selected_threshold).astype(int)
+    feature_importance = sorted(
+        [
+            {"feature": name, "importance": round(float(importance), 6)}
+            for name, importance in zip(feature_columns, model.feature_importances_)
+        ],
+        key=lambda item: item["importance"],
+        reverse=True,
+    )
 
     metrics = {
         "algorithm": "XGBoost",
@@ -357,6 +365,7 @@ def train(demo: bool = False, tune: bool = False, balance: bool = False, cv_fold
         "best_params": best_params or model.get_params(),
         "selected_threshold": selected_threshold,
         "threshold_selection": "best F1 with recall >= 0.95 when available",
+        "feature_importance": feature_importance[:15],
         "training_seconds": training_seconds,
         "prediction_ms_per_url": prediction_ms_per_url,
         "accuracy": round(float(accuracy_score(y_test, predictions)), 4),

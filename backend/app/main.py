@@ -1,7 +1,10 @@
 from contextlib import asynccontextmanager
+from collections import defaultdict, deque
+import time
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -34,10 +37,35 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+RATE_LIMIT_WINDOW_SECONDS = 60
+RATE_LIMIT_MAX_REQUESTS = 90
+_requests_by_client: dict[str, deque[float]] = defaultdict(deque)
+
 
 @app.middleware("http")
 async def security_headers(request, call_next):
+    if request.url.path.startswith(settings.api_prefix):
+        client = request.client.host if request.client else "unknown"
+        now = time.time()
+        bucket = _requests_by_client[client]
+        while bucket and now - bucket[0] > RATE_LIMIT_WINDOW_SECONDS:
+            bucket.popleft()
+        if len(bucket) >= RATE_LIMIT_MAX_REQUESTS:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many requests. Please wait before scanning again."},
+            )
+        bucket.append(now)
     response = await call_next(request)
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "font-src 'self' data:; "
+        "frame-ancestors 'none'"
+    )
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"

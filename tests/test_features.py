@@ -1,5 +1,5 @@
 from backend.app.services.features import extract_features
-from backend.ml.train import build_legitimate_seed, real_dataset
+from backend.ml import train as train_module
 
 
 def test_shortened_suspicious_url_features():
@@ -15,9 +15,37 @@ def test_safe_url_features():
     assert features["has_ip"] == 0
 
 
-def test_real_dataset_balancing_keeps_labels():
-    build_legitimate_seed()
-    data, sources = real_dataset(balance=True)
+def configure_test_dataset(tmp_path, monkeypatch):
+    phishing = tmp_path / "phishing_database_urls.csv"
+    legitimate = tmp_path / "legitimate_urls.csv"
+    phishing.write_text(
+        "url,label\n"
+        "http://login-secure-example.test,1\n"
+        "http://verify-account-example.test,1\n"
+        "http://bank-alert-example.test,1\n",
+        encoding="utf-8",
+    )
+    legitimate.write_text(
+        "url,label\n"
+        "https://www.google.com,0\n"
+        "https://www.microsoft.com,0\n"
+        "https://www.apple.com,0\n"
+        "https://www.wikipedia.org,0\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        train_module,
+        "REAL_SOURCE_FILES",
+        [
+            (phishing, 1, "Phishing.Database"),
+            (legitimate, 0, "Legitimate URL dataset"),
+        ],
+    )
+
+
+def test_real_dataset_balancing_keeps_labels(tmp_path, monkeypatch):
+    configure_test_dataset(tmp_path, monkeypatch)
+    data, sources = train_module.real_dataset(balance=True)
 
     assert {"url", "label"}.issubset(data.columns)
     assert set(data["label"].astype(int).unique()) == {0, 1}
@@ -25,11 +53,11 @@ def test_real_dataset_balancing_keeps_labels():
     assert sources
 
 
-def test_real_dataset_default_keeps_all_available_rows():
-    build_legitimate_seed()
-    data, sources = real_dataset()
+def test_real_dataset_default_keeps_all_available_rows(tmp_path, monkeypatch):
+    configure_test_dataset(tmp_path, monkeypatch)
+    data, sources = train_module.real_dataset()
 
     assert {"url", "label"}.issubset(data.columns)
-    assert len(data) >= 600
+    assert len(data) == 7
     assert set(data["label"].astype(int).unique()) == {0, 1}
     assert sources

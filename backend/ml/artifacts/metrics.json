@@ -58,24 +58,86 @@
     "validate_parameters": null,
     "verbosity": 0
   },
-  "selected_threshold": 0.22,
+  "selected_threshold": 0.21,
   "threshold_selection": "best F1 with recall >= 0.95 when available",
-  "training_seconds": 1.7927,
-  "prediction_ms_per_url": 0.0018,
-  "accuracy": 0.9206,
-  "precision": 0.896,
-  "recall": 0.9517,
-  "f1_score": 0.923,
-  "cv_f1_mean": 0.9348,
+  "feature_importance": [
+    {
+      "feature": "count_slash",
+      "importance": 0.700961
+    },
+    {
+      "feature": "path_length",
+      "importance": 0.191842
+    },
+    {
+      "feature": "has_https",
+      "importance": 0.024863
+    },
+    {
+      "feature": "has_suspicious_tld",
+      "importance": 0.013076
+    },
+    {
+      "feature": "special_char_ratio",
+      "importance": 0.010456
+    },
+    {
+      "feature": "count_dot",
+      "importance": 0.008155
+    },
+    {
+      "feature": "subdomain_count",
+      "importance": 0.007009
+    },
+    {
+      "feature": "suspicious_word_count",
+      "importance": 0.006286
+    },
+    {
+      "feature": "hostname_length",
+      "importance": 0.00628
+    },
+    {
+      "feature": "tld_length",
+      "importance": 0.00509
+    },
+    {
+      "feature": "domain_length",
+      "importance": 0.004085
+    },
+    {
+      "feature": "count_hyphen",
+      "importance": 0.003211
+    },
+    {
+      "feature": "url_entropy",
+      "importance": 0.003014
+    },
+    {
+      "feature": "count_digits",
+      "importance": 0.002646
+    },
+    {
+      "feature": "count_letters",
+      "importance": 0.002568
+    }
+  ],
+  "training_seconds": 1.7416,
+  "prediction_ms_per_url": 0.0015,
+  "accuracy": 0.9185,
+  "precision": 0.8914,
+  "recall": 0.9531,
+  "f1_score": 0.9212,
+  "cv_f1_mean": 0.9346,
   "confusion_matrix": [
     [
-      8896,
-      1104
+      8839,
+      1161
     ],
     [
-      483,
-      9516
+      469,
+      9530
     ]
   ],
-  "classification_report": "              precision    recall  f1-score   support\n\n           0       0.95      0.89      0.92     10000\n           1       0.90      0.95      0.92      9999\n\n    accuracy                           0.92     19999\n   macro avg       0.92      0.92      0.92     19999\nweighted avg       0.92      0.92      0.92     19999\n"
+  "classification_report": "              precision    recall  f1-score   support\n\n           0       0.95      0.88      0.92     10000\n           1       0.89      0.95      0.92      9999\n\n    accuracy                           0.92     19999\n   macro avg       0.92      0.92      0.92     19999\nweighted avg       0.92      0.92      0.92     19999\n"
 }

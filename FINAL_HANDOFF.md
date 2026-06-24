@@ -12,6 +12,9 @@ PhishGuard is a runnable full-stack phishing detection platform with:
 - Risk score, confidence score, indicators, and explainable factors
 - Threat dashboard with stored scan history and charts
 - REST API documentation at `/docs`
+- Premium dark cybersecurity SaaS interface with glass panels, hero scanner, animated threat visuals, and responsive dashboard
+- Clear History action, dashboard filters, JSON scan report export, risk severity levels, model evidence, confusion matrix, and feature importance chart
+- Public URL safety validation, API rate limiting, and browser security headers
 
 The local website runs at:
 
@@ -34,14 +37,15 @@ training/evaluation dataset size: 99,994 balanced URLs
 feature count: 39
 train/test split: 80:20 stratified
 cross-validation folds: 3
-selected decision threshold: 0.22
-training seconds: 1.7927
-prediction time per URL: 0.0018 ms
-accuracy: 0.9206
-precision: 0.896
-recall: 0.9517
-f1 score: 0.923
-cross-validation F1 mean: 0.9348
+selected decision threshold: 0.21
+training seconds: 1.7416
+prediction time per URL: 0.0015 ms
+accuracy: 0.9185
+precision: 0.8914
+recall: 0.9531
+f1 score: 0.9212
+cross-validation F1 mean: 0.9346
+confusion matrix: [[8839, 1161], [469, 9530]]
 ```
 
 The current local data files are:
@@ -204,3 +208,5 @@ Use these points when explaining the system:
 - SHAP can be enabled for model-level explainability, while the default UI still returns understandable risk factors instantly.
 - PostgreSQL is used in Docker production deployment, while SQLite keeps local development simple.
 - The UI is written as a real public cybersecurity product with professional wording.
+- The model evidence panel is useful for FYP2 and competition judging because it shows data sources, dataset size, cross-validation result, confusion matrix, and feature importance directly inside the product.
+- Security maturity was improved with input validation, local/internal URL blocking, rate limiting, security headers, scan history controls, and report export.

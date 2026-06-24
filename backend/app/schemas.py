@@ -20,6 +20,7 @@ class ScanResponse(BaseModel):
     hostname: str
     result: str
     is_phishing: bool
+    threat_level: str
     risk_score: int
     confidence: float
     indicators: list[str]

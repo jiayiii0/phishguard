@@ -4,6 +4,8 @@ PhishGuard is a phishing website detection platform powered by XGBoost. It provi
 
 URL Input -> Feature Extraction -> XGBoost Prediction -> SHAP Explanation -> Result Dashboard
 
+The current interface is designed as a premium cybersecurity SaaS product: dark glass panels, hero-first URL scanning, animated threat visuals, instant risk cards, model evidence, and dashboard analytics. The UI does not mention FYP, coursework, university, or academic project wording.
+
 ## Stack
 
 - React + Tailwind frontend
@@ -12,6 +14,21 @@ URL Input -> Feature Extraction -> XGBoost Prediction -> SHAP Explanation -> Res
 - SQLite fallback for quick local development
 - XGBoost as the primary prediction engine
 - SHAP explainable AI
+- Framer Motion animations
+- Recharts dashboard visualizations
+
+## Competition-Grade Features
+
+- Real-time URL scanner in the hero section
+- Risk severity levels: Safe, Low Risk, Suspicious, High Risk, and Phishing
+- Risk score and confidence score for every scan
+- Detection summary and explainable top factors
+- JSON scan report export
+- Clear History action for stored scans
+- Dashboard filters for Safe, Low Risk, Suspicious, High Risk, and Phishing
+- Model Evidence section with training summary, confusion matrix, and feature importance chart
+- Public URL safety validation to block localhost, internal IP, reserved IP, and non-HTTP schemes
+- API rate limiting and security headers
 
 ## Project Structure
 
@@ -104,13 +121,14 @@ sources: Phishing.Database 789,052 rows + OpenPhish 300 rows + legitimate URL da
 training/evaluation sample: 99,994 balanced URLs
 split: 80:20 stratified
 cross_validation_folds: 3
-selected_threshold: 0.22
-accuracy: 0.9206
-precision: 0.896
-recall: 0.9517
-f1_score: 0.923
-cv_f1_mean: 0.9348
-prediction_ms_per_url: 0.0018
+selected_threshold: 0.21
+accuracy: 0.9185
+precision: 0.8914
+recall: 0.9531
+f1_score: 0.9212
+cv_f1_mean: 0.9346
+prediction_ms_per_url: 0.0015
+confusion_matrix: [[8839, 1161], [469, 9530]]
 ```
 
 Phishing recall is intentionally prioritized because false negatives are dangerous in phishing detection. PhishTank download support is implemented, but the public feed can return HTTP 429 rate limiting without an application key. To train with as much PhishTank data as possible, register a PhishTank application key, set it before training, and run:
@@ -160,3 +178,11 @@ PHISHTANK_APP_KEY=optional_phishtank_application_key
 ```
 
 `ENABLE_NETWORK_INTEL=true` enables live DNS/WHOIS checks. Keep it disabled for the fastest scan response.
+
+## FYP2 Report Notes To Highlight
+
+- The platform was upgraded from a basic detector into a deployable cybersecurity SaaS-style product.
+- XGBoost remains the primary prediction engine and the selected threshold prioritizes phishing recall.
+- The current model was trained and evaluated on 99,994 balanced URLs using 789,052 raw Phishing.Database URLs, 300 OpenPhish URLs, and 50,000 legitimate URLs.
+- The system exposes model evidence directly in the UI: dataset size, source list, metrics, confusion matrix, and feature importance.
+- Practical safety controls were added: input validation, rate limiting, security headers, scan history management, and report export.
