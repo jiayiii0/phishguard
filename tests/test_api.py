@@ -24,6 +24,23 @@ def test_scan_endpoint_returns_xgboost_prediction():
     assert body["indicators"]
     assert body["shap_factors"]
     assert "is_shortened_url" in body["features"]
+    assert body["original_url"] == "http://bit.ly/paypal-login-alert"
+    assert body["normalized_url"].startswith("http://bit.ly/")
+    assert "expanded_url" in body
+    assert "redirect_chain" in body
+    assert "final_destination" in body
+    assert "shortened_url" in body["evasion_techniques"]
+
+
+def test_scan_endpoint_decodes_obfuscated_url():
+    client = TestClient(app)
+    response = client.post("/api/v1/scan", json={"url": "https://example.com/%70%61%79%70%61%6c#fragment"})
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["normalized_url"] == "https://example.com/paypal"
+    assert body["features"]["url_encoding_detected"] == 1
+    assert "percent_encoding" in body["evasion_techniques"]
 
 
 def test_dashboard_endpoint_returns_scan_statistics():

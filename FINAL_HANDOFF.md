@@ -34,18 +34,18 @@ training sources:
 - OpenPhish: 300 rows from openphish_urls.csv
 - Legitimate URL dataset: 50,000 rows from legitimate_urls.csv
 training/evaluation dataset size: 99,994 balanced URLs
-feature count: 39
+feature count: 63
 train/test split: 80:20 stratified
 cross-validation folds: 3
-selected decision threshold: 0.21
-training seconds: 1.7416
+selected decision threshold: 0.24
+training seconds: 1.8775
 prediction time per URL: 0.0015 ms
-accuracy: 0.9185
-precision: 0.8914
-recall: 0.9531
-f1 score: 0.9212
-cross-validation F1 mean: 0.9346
-confusion matrix: [[8839, 1161], [469, 9530]]
+accuracy: 0.9287
+precision: 0.9095
+recall: 0.9523
+f1 score: 0.9304
+cross-validation F1 mean: 0.9382
+confusion matrix: [[9052, 948], [477, 9522]]
 ```
 
 The current local data files are:
@@ -82,12 +82,16 @@ The feature extractor covers:
 - Subdomain count
 - Suspicious keyword count
 - Shortened URL services
+- Optional shortened URL redirect expansion with SSRF blocking, redirect depth limit, and request timeout
+- Redirect count, redirect domain changes, final-domain difference, and redirect loop detection
 - Redirect-style symbols
 - Punycode and homograph patterns
+- Unicode and homoglyph similarity against known brands
 - Suspicious top-level domains
 - Brand impersonation
 - Typosquatting similarity
 - Encoded characters
+- Obfuscation score, embedded URL count, @ symbol abuse, excessive hyphens, Unicode count, and high-entropy token count
 - Optional DNS and WHOIS related signals
 
 ## Training Data
@@ -210,3 +214,4 @@ Use these points when explaining the system:
 - The UI is written as a real public cybersecurity product with professional wording.
 - The model evidence panel is useful for FYP2 and competition judging because it shows data sources, dataset size, cross-validation result, confusion matrix, and feature importance directly inside the product.
 - Security maturity was improved with input validation, local/internal URL blocking, rate limiting, security headers, scan history controls, and report export.
+- Modern evasion handling was added before XGBoost prediction: canonical normalization, percent-decoding, shortened URL detection, redirect metadata, obfuscation detection, punycode detection, Unicode/homoglyph checks, and brand impersonation scoring.

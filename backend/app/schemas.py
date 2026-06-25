@@ -17,6 +17,12 @@ class ShapFactor(BaseModel):
 
 class ScanResponse(BaseModel):
     url: str
+    original_url: str
+    normalized_url: str
+    expanded_url: str
+    redirect_chain: list[str]
+    final_destination: str
+    evasion_techniques: list[str]
     hostname: str
     result: str
     is_phishing: bool

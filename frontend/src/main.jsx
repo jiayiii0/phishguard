@@ -307,6 +307,8 @@ function ResultPanel({ result }) {
     { name: "Risk", value: result.risk_score },
     { name: "Remaining", value: Math.max(100 - result.risk_score, 0) },
   ];
+  const evasionTechniques = result.evasion_techniques || [];
+  const redirectChain = result.redirect_chain || [];
 
   return (
     <section id="result" className="mx-auto mt-4 grid max-w-7xl gap-5 px-5 lg:grid-cols-[1.15fr_.85fr]">
@@ -340,6 +342,45 @@ function ResultPanel({ result }) {
               </div>
             ))}
           </div>
+        </div>
+        <div className="mt-6 rounded-lg border border-white/10 bg-black/20 p-4">
+          <h3 className="text-lg font-black text-white">URL Intelligence</h3>
+          <div className="mt-4 grid gap-3 text-sm">
+            <div>
+              <div className="text-xs font-black uppercase text-slate-500">Normalized URL</div>
+              <div className="mt-1 break-all font-semibold text-slate-300">{result.normalized_url || result.url}</div>
+            </div>
+            <div>
+              <div className="text-xs font-black uppercase text-slate-500">Expanded URL</div>
+              <div className="mt-1 break-all font-semibold text-slate-300">{result.expanded_url || result.normalized_url || result.url}</div>
+            </div>
+            <div>
+              <div className="text-xs font-black uppercase text-slate-500">Final Destination</div>
+              <div className="mt-1 break-all font-semibold text-slate-300">{result.final_destination || result.hostname || "N/A"}</div>
+            </div>
+          </div>
+          <div className="mt-4">
+            <div className="text-xs font-black uppercase text-slate-500">Detected Evasion Techniques</div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {(evasionTechniques.length ? evasionTechniques : ["none_detected"]).map((item) => (
+                <span key={item} className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-black text-cyan-100">
+                  {cleanFeatureName(item)}
+                </span>
+              ))}
+            </div>
+          </div>
+          {redirectChain.length > 1 && (
+            <div className="mt-4">
+              <div className="text-xs font-black uppercase text-slate-500">Redirect Chain</div>
+              <div className="mt-2 grid gap-2">
+                {redirectChain.map((url, index) => (
+                  <div key={`${url}-${index}`} className="break-all rounded-lg border border-white/10 bg-white/[.04] px-3 py-2 text-xs font-semibold text-slate-300">
+                    {index + 1}. {url}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </motion.div>
       <motion.div className="glass-panel rounded-lg p-6" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}>

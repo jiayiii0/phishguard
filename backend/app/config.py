@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:8000,http://127.0.0.1:8000"
     enable_network_intel: bool = False
     enable_shap: bool = False
+    enable_shortener_expansion: bool = False
+    url_resolve_timeout_seconds: float = 1.5
 
     model_config = SettingsConfigDict(env_file=BASE_DIR / ".env", env_file_encoding="utf-8")
 

@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from ..config import get_settings
-from .features import explain_indicators, extract_features, hostname_from_url, normalize_url
+from .features import explain_indicators, extract_features, hostname_from_url, preprocess_url
 
 
 def threat_level(score: int, is_phishing: bool) -> str:
@@ -71,7 +71,16 @@ class PhishGuardPredictor:
     def _shap_factors(self, frame: pd.DataFrame, scaled: np.ndarray, features: dict[str, Any]) -> list[dict[str, Any]]:
         if self.explainer is None:
             heuristic = []
-            for key in ("is_shortened_url", "brand_impersonation", "has_punycode", "has_suspicious_tld", "has_https"):
+            for key in (
+                "is_shortened_url",
+                "final_domain_differs",
+                "homoglyph_detected",
+                "punycode_detected",
+                "brand_impersonation",
+                "obfuscation_score",
+                "has_suspicious_tld",
+                "has_https",
+            ):
                 if key in features:
                     impact = float(features[key]) if key != "has_https" else float(1 - int(features[key]))
                     heuristic.append({
@@ -106,8 +115,18 @@ class PhishGuardPredictor:
             return self._shap_factors(frame, scaled, features)
 
     def predict(self, url: str) -> dict[str, Any]:
-        normalized = normalize_url(url)
-        features = extract_features(normalized, include_network=self.settings.enable_network_intel)
+        preprocessed = preprocess_url(
+            url,
+            expand_shorteners=self.settings.enable_shortener_expansion,
+            timeout=float(self.settings.url_resolve_timeout_seconds),
+            max_redirects=5,
+        )
+        normalized = preprocessed.analysis_url
+        features = extract_features(
+            normalized,
+            include_network=self.settings.enable_network_intel,
+            preprocessed=preprocessed,
+        )
         frame, scaled = self._vectorize(features)
 
         probability = self.model.predict_proba(scaled)[0]
@@ -123,9 +142,14 @@ class PhishGuardPredictor:
             "has_suspicious_tld",
             "has_encoded_chars",
             "has_ip",
+            "homoglyph_detected",
+            "final_domain_differs",
+            "has_at_symbol_abuse",
+            "url_encoding_detected",
         ]
         indicator_weight += sum(float(features.get(flag, 0)) for flag in high_value_flags) * 0.14
         indicator_weight += min(float(features.get("suspicious_word_count", 0)) * 0.08, 0.24)
+        indicator_weight += min(float(features.get("obfuscation_score", 0)) * 0.3, 0.18)
         if int(features.get("has_https", 1)) == 0:
             indicator_weight += 0.08
         indicator_probability = min(indicator_weight, 0.96)
@@ -138,7 +162,13 @@ class PhishGuardPredictor:
             indicators = ["The XGBoost model detected a suspicious URL pattern"]
 
         return {
-            "url": normalized,
+            "url": preprocessed.original_url,
+            "original_url": preprocessed.original_url,
+            "normalized_url": preprocessed.normalized_url,
+            "expanded_url": preprocessed.expanded_url,
+            "redirect_chain": preprocessed.redirect_chain,
+            "final_destination": preprocessed.final_destination_domain,
+            "evasion_techniques": preprocessed.evasion_techniques,
             "hostname": hostname_from_url(normalized),
             "result": "Phishing" if is_phishing else "Safe",
             "is_phishing": bool(is_phishing),

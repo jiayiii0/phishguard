@@ -29,6 +29,7 @@ The current interface is designed as a premium cybersecurity SaaS product: dark 
 - Model Evidence section with training summary, confusion matrix, and feature importance chart
 - Public URL safety validation to block localhost, internal IP, reserved IP, and non-HTTP schemes
 - API rate limiting and security headers
+- Modern evasion preprocessing for percent-encoding, obfuscation, punycode, Unicode/homoglyph domains, brand impersonation, suspicious TLDs, shortened URLs, and redirect metadata
 
 ## Project Structure
 
@@ -121,14 +122,15 @@ sources: Phishing.Database 789,052 rows + OpenPhish 300 rows + legitimate URL da
 training/evaluation sample: 99,994 balanced URLs
 split: 80:20 stratified
 cross_validation_folds: 3
-selected_threshold: 0.21
-accuracy: 0.9185
-precision: 0.8914
-recall: 0.9531
-f1_score: 0.9212
-cv_f1_mean: 0.9346
+feature_count: 63
+selected_threshold: 0.24
+accuracy: 0.9287
+precision: 0.9095
+recall: 0.9523
+f1_score: 0.9304
+cv_f1_mean: 0.9382
 prediction_ms_per_url: 0.0015
-confusion_matrix: [[8839, 1161], [469, 9530]]
+confusion_matrix: [[9052, 948], [477, 9522]]
 ```
 
 Phishing recall is intentionally prioritized because false negatives are dangerous in phishing detection. PhishTank download support is implemented, but the public feed can return HTTP 429 rate limiting without an application key. To train with as much PhishTank data as possible, register a PhishTank application key, set it before training, and run:
@@ -173,16 +175,20 @@ http://127.0.0.1:8000/docs
 DATABASE_URL=postgresql+psycopg2://phishguard:phishguard_password@postgres:5432/phishguard
 ENABLE_SHAP=false
 ENABLE_NETWORK_INTEL=false
+ENABLE_SHORTENER_EXPANSION=false
+URL_RESOLVE_TIMEOUT_SECONDS=1.5
 CORS_ORIGINS=http://127.0.0.1:8000,http://localhost:8000
 PHISHTANK_APP_KEY=optional_phishtank_application_key
 ```
 
 `ENABLE_NETWORK_INTEL=true` enables live DNS/WHOIS checks. Keep it disabled for the fastest scan response.
+`ENABLE_SHORTENER_EXPANSION=true` enables live redirect expansion for known shorteners with SSRF checks, redirect depth limit, and timeout. It is disabled by default locally so scans remain instant even when external network calls are blocked or slow.
 
 ## FYP2 Report Notes To Highlight
 
 - The platform was upgraded from a basic detector into a deployable cybersecurity SaaS-style product.
 - XGBoost remains the primary prediction engine and the selected threshold prioritizes phishing recall.
 - The current model was trained and evaluated on 99,994 balanced URLs using 789,052 raw Phishing.Database URLs, 300 OpenPhish URLs, and 50,000 legitimate URLs.
+- The feature set increased to 63 engineered signals, including shortened URL, redirect, obfuscation, punycode, Unicode/homoglyph, suspicious TLD, brand impersonation, and encoded URL features.
 - The system exposes model evidence directly in the UI: dataset size, source list, metrics, confusion matrix, and feature importance.
 - Practical safety controls were added: input validation, rate limiting, security headers, scan history management, and report export.
