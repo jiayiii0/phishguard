@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     enable_network_intel: bool = False
     enable_shap: bool = False
     enable_shortener_expansion: bool = False
+    enable_threat_feed_lookup: bool = True
     url_resolve_timeout_seconds: float = 1.5
 
     model_config = SettingsConfigDict(env_file=BASE_DIR / ".env", env_file_encoding="utf-8")

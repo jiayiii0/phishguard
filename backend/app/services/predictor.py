@@ -10,6 +10,7 @@ import pandas as pd
 
 from ..config import get_settings
 from .features import explain_indicators, extract_features, hostname_from_url, preprocess_url
+from .threat_feed import lookup_threat_feed
 
 
 def threat_level(score: int, is_phishing: bool) -> str:
@@ -127,6 +128,18 @@ class PhishGuardPredictor:
             include_network=self.settings.enable_network_intel,
             preprocessed=preprocessed,
         )
+        hostname = hostname_from_url(normalized)
+        threat_feed = {"matched": False, "source": "", "match_type": ""}
+        if self.settings.enable_threat_feed_lookup:
+            threat_feed = lookup_threat_feed(
+                preprocessed.expanded_url,
+                hostname,
+                timeout=float(self.settings.url_resolve_timeout_seconds),
+            )
+        feed_match_type = str(threat_feed.get("match_type") or "").lower()
+        features["known_threat_feed_match"] = int(bool(threat_feed.get("matched")))
+        features["known_threat_feed_url_match"] = int(feed_match_type == "url")
+        features["known_threat_feed_domain_match"] = int(feed_match_type == "domain")
         frame, scaled = self._vectorize(features)
 
         probability = self.model.predict_proba(scaled)[0]
@@ -154,6 +167,13 @@ class PhishGuardPredictor:
             indicator_weight += 0.08
         indicator_probability = min(indicator_weight, 0.96)
         combined_probability = max(phishing_probability, indicator_probability)
+        if threat_feed.get("matched"):
+            combined_probability = max(combined_probability, 0.98)
+            source = str(threat_feed.get("source") or "public threat feed")
+            match_type = "URL" if feed_match_type == "url" else "domain"
+            feed_indicator = f"Known phishing feed match: {source} {match_type}"
+            if feed_indicator not in indicators:
+                indicators.insert(0, feed_indicator)
         is_phishing = combined_probability >= model_threshold
         confidence = combined_probability if is_phishing else max(float(probability[0]), 1 - combined_probability)
         risk_score = int(round(combined_probability * 100))
@@ -168,8 +188,12 @@ class PhishGuardPredictor:
             "expanded_url": preprocessed.expanded_url,
             "redirect_chain": preprocessed.redirect_chain,
             "final_destination": preprocessed.final_destination_domain,
-            "evasion_techniques": preprocessed.evasion_techniques,
-            "hostname": hostname_from_url(normalized),
+            "evasion_techniques": (
+                ["threat_feed_match", *preprocessed.evasion_techniques]
+                if threat_feed.get("matched")
+                else preprocessed.evasion_techniques
+            ),
+            "hostname": hostname,
             "result": "Phishing" if is_phishing else "Safe",
             "is_phishing": bool(is_phishing),
             "threat_level": threat_level(risk_score, bool(is_phishing)),

@@ -43,6 +43,32 @@ def test_scan_endpoint_decodes_obfuscated_url():
     assert "percent_encoding" in body["evasion_techniques"]
 
 
+def test_scan_endpoint_uses_threat_feed_match_for_clean_looking_phishing_url(monkeypatch):
+    from backend.app.services import predictor as predictor_module
+
+    monkeypatch.setattr(
+        predictor_module,
+        "lookup_threat_feed",
+        lambda url, hostname, timeout=2.0: {
+            "matched": True,
+            "source": "Phishing.Database",
+            "match_type": "url",
+        },
+        raising=False,
+    )
+
+    client = TestClient(app)
+    response = client.post("/api/v1/scan", json={"url": "https://www.boutique-dofus.fr"})
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["is_phishing"] is True
+    assert body["result"] == "Phishing"
+    assert body["risk_score"] >= 95
+    assert "Known phishing feed match: Phishing.Database URL" in body["indicators"]
+    assert body["features"]["known_threat_feed_match"] == 1
+
+
 def test_dashboard_endpoint_returns_scan_statistics():
     client = TestClient(app)
     client.post("/api/v1/scan", json={"url": "https://www.google.com"})
