@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: phishguard
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: PYTHONPATH
+        value: /app
+      - key: MODEL_DIR
+        value: /app/backend/ml/artifacts
+      - key: ENABLE_NETWORK_INTEL
+        value: "false"
+      - key: ENABLE_SHORTENER_EXPANSION
+        value: "false"
+      - key: ENABLE_SHAP
+        value: "false"
+      - key: DATABASE_URL
+        sync: false
