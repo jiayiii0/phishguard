@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field
 
 
 class ScanRequest(BaseModel):
@@ -29,6 +29,12 @@ class ScanResponse(BaseModel):
     threat_level: str
     risk_score: int
     confidence: float
+    model_probability: float
+    model_threshold: float
+    contextual_signals: list[str]
+    threat_feed_matched: bool
+    threat_feed_status: str
+    threat_feed_source: str
     indicators: list[str]
     shap_factors: list[ShapFactor]
     features: dict[str, Any]

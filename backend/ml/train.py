@@ -14,12 +14,21 @@ import joblib
 import numpy as np
 import pandas as pd
 import requests
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score, precision_score, recall_score
+from sklearn.metrics import (
+    accuracy_score,
+    average_precision_score,
+    classification_report,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
 from sklearn.model_selection import RandomizedSearchCV, cross_val_score, train_test_split
 from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
 
-from backend.app.services.features import extract_features
+from backend.app.services.features import extract_features, hostname_from_url, normalize_url
 ML_DIR = Path(__file__).resolve().parent
 DATA_DIR = ML_DIR / "data"
 ARTIFACT_DIR = ML_DIR / "artifacts"
@@ -40,6 +49,10 @@ REAL_SOURCE_FILES = [
     (DATA_DIR / "uci_phishing_urls.csv", None, "UCI Phishing Websites Dataset"),
     (DATA_DIR / "kaggle_phishing_urls.csv", None, "Kaggle phishing URL datasets"),
     (DATA_DIR / "legitimate_urls.csv", 0, "Legitimate URL dataset"),
+    (DATA_DIR / "legitimate_hard_negatives.csv", 0, "Legitimate hard-negative URL set"),
+    (DATA_DIR / "broad_legitimate_hard_negatives.csv", 0, "Broad legitimate hard-negative URL set"),
+    (DATA_DIR / "targeted_hard_negatives.csv", 0, "Targeted external hard-negative URL set"),
+    (DATA_DIR / "targeted_missed_phishing.csv", 1, "Targeted missed phishing URL set"),
 ]
 PHISHTANK_COLUMNS = {"phish_id", "url", "phish_detail_url", "submission_time", "verified", "verification_time", "online", "target"}
 
@@ -216,6 +229,42 @@ def load_csv_if_exists(path: Path, label: int | None = None) -> pd.DataFrame:
     return frame[["url", "label"]].dropna()
 
 
+def clean_labeled_dataset(frame: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, int]]:
+    report = {
+        "raw_rows": int(len(frame)),
+        "missing_rows_removed": 0,
+        "malformed_rows_removed": 0,
+        "exact_duplicate_urls_removed": 0,
+        "normalized_duplicate_urls_removed": 0,
+        "conflicting_normalized_urls_removed": 0,
+    }
+    frame = frame.dropna(subset=["url", "label"]).copy()
+    report["missing_rows_removed"] = report["raw_rows"] - int(len(frame))
+    frame["url"] = frame["url"].astype(str).str.strip()
+    frame["label"] = frame["label"].astype(int)
+    before_exact = len(frame)
+    frame = frame.drop_duplicates("url")
+    report["exact_duplicate_urls_removed"] = before_exact - int(len(frame))
+
+    frame["normalized_url"] = frame["url"].map(normalize_url)
+    frame["hostname"] = frame["normalized_url"].map(hostname_from_url)
+    before_malformed = len(frame)
+    frame = frame[frame["hostname"].astype(bool)].copy()
+    report["malformed_rows_removed"] = before_malformed - int(len(frame))
+
+    label_counts = frame.groupby("normalized_url")["label"].nunique()
+    conflicting_urls = set(label_counts[label_counts > 1].index)
+    if conflicting_urls:
+        frame = frame[~frame["normalized_url"].isin(conflicting_urls)].copy()
+    report["conflicting_normalized_urls_removed"] = len(conflicting_urls)
+
+    before_normalized = len(frame)
+    frame = frame.drop_duplicates("normalized_url")
+    report["normalized_duplicate_urls_removed"] = before_normalized - int(len(frame))
+    frame["url"] = frame["normalized_url"]
+    return frame[["url", "label", "hostname"]].reset_index(drop=True), report
+
+
 def demo_dataset() -> pd.DataFrame:
     phishing_urls = []
     legitimate_urls = []
@@ -231,7 +280,7 @@ def demo_dataset() -> pd.DataFrame:
     return pd.concat([phishing, legitimate], ignore_index=True)
 
 
-def real_dataset(balance: bool = False) -> tuple[pd.DataFrame, list[str]]:
+def real_dataset(balance: bool = False, return_report: bool = False) -> tuple[pd.DataFrame, list[str]] | tuple[pd.DataFrame, list[str], dict[str, int]]:
     frames = []
     sources_used = []
     for path, label, source_name in REAL_SOURCE_FILES:
@@ -243,54 +292,160 @@ def real_dataset(balance: bool = False) -> tuple[pd.DataFrame, list[str]]:
         raise FileNotFoundError(
             "No training data found. Add CSV files under backend/ml/data or run with --demo."
         )
-    frame = pd.concat(frames, ignore_index=True).dropna().drop_duplicates("url")
+    frame = pd.concat(frames, ignore_index=True)
     if frame.empty:
         raise FileNotFoundError(
             "No training data found. Add CSV files under backend/ml/data or run with --demo."
         )
+    frame, cleaning_report = clean_labeled_dataset(frame)
     counts = frame["label"].astype(int).value_counts()
     if set(counts.index) != {0, 1}:
         raise ValueError("Training requires both labels: 0 legitimate and 1 phishing.")
+    cleaning_report["rows_after_cleaning"] = int(len(frame))
+    cleaning_report["legitimate_rows_after_cleaning"] = int(counts.get(0, 0))
+    cleaning_report["phishing_rows_after_cleaning"] = int(counts.get(1, 0))
     if balance:
         smallest = int(counts.min())
         frame = pd.concat(
             [group.sample(n=smallest, random_state=42) for _, group in frame.groupby("label")],
             ignore_index=True,
         )
-    return frame.sample(frac=1, random_state=42).reset_index(drop=True), sources_used
+    frame = frame.sample(frac=1, random_state=42).reset_index(drop=True)
+    cleaning_report["rows_after_balancing"] = int(len(frame))
+    cleaning_report["legitimate_rows_after_balancing"] = int((frame["label"].astype(int) == 0).sum())
+    cleaning_report["phishing_rows_after_balancing"] = int((frame["label"].astype(int) == 1).sum())
+    if return_report:
+        return frame, sources_used, cleaning_report
+    return frame, sources_used
 
+
+def split_by_hostname(
+    data: pd.DataFrame,
+    test_size: float = 0.15,
+    validation_size: float = 0.15,
+    random_state: int = 42,
+) -> tuple[pd.Index, pd.Index, pd.Index, dict[str, int | str]]:
+    group_labels = data.groupby("hostname")["label"].agg(lambda values: int(values.mode().iloc[0]))
+    stratify = group_labels if group_labels.value_counts().min() >= 2 else None
+    train_val_groups, test_groups = train_test_split(
+        group_labels.index,
+        test_size=test_size,
+        random_state=random_state,
+        stratify=stratify,
+    )
+    remaining_labels = group_labels.loc[train_val_groups]
+    validation_fraction = validation_size / (1 - test_size)
+    remaining_stratify = remaining_labels if remaining_labels.value_counts().min() >= 2 else None
+    train_groups, validation_groups = train_test_split(
+        remaining_labels.index,
+        test_size=validation_fraction,
+        random_state=random_state,
+        stratify=remaining_stratify,
+    )
+
+    train_mask = data["hostname"].isin(train_groups)
+    validation_mask = data["hostname"].isin(validation_groups)
+    test_mask = data["hostname"].isin(test_groups)
+    split_report = {
+        "method": "hostname-grouped split with stratified group labels",
+        "random_seed": random_state,
+        "train_size": int(train_mask.sum()),
+        "validation_size": int(validation_mask.sum()),
+        "final_test_size": int(test_mask.sum()),
+        "train_hosts": int(len(train_groups)),
+        "validation_hosts": int(len(validation_groups)),
+        "final_test_hosts": int(len(test_groups)),
+        "train_validation_host_overlap": int(len(set(train_groups) & set(validation_groups))),
+        "train_test_host_overlap": int(len(set(train_groups) & set(test_groups))),
+        "validation_test_host_overlap": int(len(set(validation_groups) & set(test_groups))),
+    }
+    return data.index[train_mask], data.index[validation_mask], data.index[test_mask], split_report
+
+
+def threshold_metrics(y_true, probabilities, threshold: float) -> dict[str, float | int | list[list[int]]]:
+    predictions = (probabilities >= threshold).astype(int)
+    matrix = confusion_matrix(y_true, predictions).tolist()
+    tn, fp = matrix[0]
+    fn, tp = matrix[1]
+    return {
+        "threshold": round(float(threshold), 2),
+        "accuracy": round(float(accuracy_score(y_true, predictions)), 6),
+        "precision": round(float(precision_score(y_true, predictions, zero_division=0)), 6),
+        "recall": round(float(recall_score(y_true, predictions, zero_division=0)), 6),
+        "f1": round(float(f1_score(y_true, predictions, zero_division=0)), 6),
+        "false_positive_rate": round(float(fp / max(fp + tn, 1)), 6),
+        "false_negative_rate": round(float(fn / max(fn + tp, 1)), 6),
+        "confusion_matrix": matrix,
+    }
+
+
+
+def select_threshold(validation_thresholds: list[dict[str, float | int | list[list[int]]]]) -> dict[str, float | int | list[list[int]]]:
+    strong_recall_low_fp = [
+        score
+        for score in validation_thresholds
+        if float(score["recall"]) >= 0.92 and float(score["false_positive_rate"]) <= 0.03
+    ]
+    if strong_recall_low_fp:
+        return max(
+            strong_recall_low_fp,
+            key=lambda score: (float(score["precision"]), float(score["recall"]), float(score["f1"])),
+        )
+
+    high_recall = [score for score in validation_thresholds if float(score["recall"]) >= 0.93]
+    return max(
+        high_recall or validation_thresholds,
+        key=lambda score: (float(score["f1"]), float(score["precision"]), -float(score["false_positive_rate"])),
+    )
 
 def train(demo: bool = False, tune: bool = False, balance: bool = False, cv_folds: int = 3) -> dict:
     if demo:
         data = demo_dataset()
         sources_used = ["Synthetic local demo dataset: 1440 generated URLs"]
+        data, cleaning_report = clean_labeled_dataset(data)
     else:
-        data, sources_used = real_dataset(balance=balance)
-    data = data.dropna().drop_duplicates("url")
-    data["label"] = data["label"].astype(int)
+        data, sources_used, cleaning_report = real_dataset(balance=balance, return_report=True)
 
     features = pd.DataFrame([extract_features(url, include_network=False) for url in data["url"]])
-    labels = data["label"]
+    labels = data["label"].astype(int)
     feature_columns = list(features.columns)
 
-    x_train, x_test, y_train, y_test = train_test_split(
-        features, labels, test_size=0.2, random_state=42, stratify=labels
+    train_index, validation_index, test_index, split_report = split_by_hostname(
+        data,
+        test_size=0.15,
+        validation_size=0.15,
+        random_state=42,
     )
+    x_train = features.loc[train_index]
+    y_train = labels.loc[train_index]
+    x_validation = features.loc[validation_index]
+    y_validation = labels.loc[validation_index]
+    x_test = features.loc[test_index]
+    y_test = labels.loc[test_index]
+
     scaler = StandardScaler()
     x_train_scaled = scaler.fit_transform(x_train)
+    x_validation_scaled = scaler.transform(x_validation)
     x_test_scaled = scaler.transform(x_test)
 
+    train_label_counts = y_train.value_counts().to_dict()
     label_counts = labels.value_counts().to_dict()
+    training_negative = max(int(train_label_counts.get(0, 1)), 1)
+    training_positive = max(int(train_label_counts.get(1, 1)), 1)
+    scale_pos_weight = training_negative / training_positive
     negative = max(int(label_counts.get(0, 1)), 1)
     positive = max(int(label_counts.get(1, 1)), 1)
-    scale_pos_weight = negative / positive
 
     model = XGBClassifier(
-        n_estimators=120,
+        n_estimators=240,
         max_depth=4,
-        learning_rate=0.08,
+        learning_rate=0.05,
         subsample=0.9,
         colsample_bytree=0.9,
+        min_child_weight=3,
+        gamma=0.1,
+        reg_alpha=0.05,
+        reg_lambda=1.2,
         eval_metric="logloss",
         random_state=42,
         n_jobs=1,
@@ -310,6 +465,9 @@ def train(demo: bool = False, tune: bool = False, balance: bool = False, cv_fold
                 "subsample": [0.75, 0.85, 0.95, 1.0],
                 "colsample_bytree": [0.75, 0.85, 0.95, 1.0],
                 "min_child_weight": [1, 3, 5],
+                "gamma": [0, 0.05, 0.1, 0.2],
+                "reg_alpha": [0, 0.05, 0.1],
+                "reg_lambda": [0.8, 1.0, 1.2, 1.5],
             },
             n_iter=12,
             scoring="f1",
@@ -323,25 +481,33 @@ def train(demo: bool = False, tune: bool = False, balance: bool = False, cv_fold
     else:
         model.fit(x_train_scaled, y_train)
     training_seconds = round(time.perf_counter() - training_started, 4)
+
+    validation_probabilities = model.predict_proba(x_validation_scaled)[:, 1]
+    threshold_candidates = np.arange(0.20, 0.81, 0.01)
+    validation_thresholds = [
+        threshold_metrics(y_validation, validation_probabilities, threshold)
+        for threshold in threshold_candidates
+    ]
+    selected = select_threshold(validation_thresholds)
+    selected_threshold = float(selected["threshold"])
+
     prediction_started = time.perf_counter()
     probabilities = model.predict_proba(x_test_scaled)[:, 1]
     prediction_ms_per_url = round(((time.perf_counter() - prediction_started) / max(len(x_test_scaled), 1)) * 1000, 4)
-    cv_scores = cross_val_score(model, scaler.transform(features), labels, cv=cv_folds, scoring="f1")
-
-    threshold_candidates = np.arange(0.20, 0.81, 0.01)
-    threshold_scores = []
-    for threshold in threshold_candidates:
-        candidate_predictions = (probabilities >= threshold).astype(int)
-        threshold_scores.append({
-            "threshold": round(float(threshold), 2),
-            "precision": float(precision_score(y_test, candidate_predictions, zero_division=0)),
-            "recall": float(recall_score(y_test, candidate_predictions, zero_division=0)),
-            "f1": float(f1_score(y_test, candidate_predictions, zero_division=0)),
-        })
-    high_recall_scores = [score for score in threshold_scores if score["recall"] >= 0.95]
-    selected = max(high_recall_scores or threshold_scores, key=lambda score: (score["f1"], score["precision"]))
-    selected_threshold = float(selected["threshold"])
     predictions = (probabilities >= selected_threshold).astype(int)
+    cv_scores = cross_val_score(model, x_train_scaled, y_train, cv=cv_folds, scoring="f1")
+    test_matrix = confusion_matrix(y_test, predictions).tolist()
+    tn, fp = test_matrix[0]
+    fn, tp = test_matrix[1]
+    try:
+        roc_auc = float(roc_auc_score(y_test, probabilities))
+    except ValueError:
+        roc_auc = 0.0
+    try:
+        pr_auc = float(average_precision_score(y_test, probabilities))
+    except ValueError:
+        pr_auc = 0.0
+
     feature_importance = sorted(
         [
             {"feature": name, "importance": round(float(importance), 6)}
@@ -359,21 +525,33 @@ def train(demo: bool = False, tune: bool = False, balance: bool = False, cv_fold
         "class_distribution": {str(k): int(v) for k, v in labels.value_counts().to_dict().items()},
         "balanced_training": bool(balance),
         "feature_count": int(len(feature_columns)),
-        "train_test_split": "80:20 stratified",
+        "data_cleaning": cleaning_report,
+        "split": split_report,
+        "train_validation_test_split": "hostname-grouped 70:15:15",
         "cross_validation_folds": int(cv_folds),
         "hyperparameter_tuning": "RandomizedSearchCV" if tune else "fixed baseline parameters",
         "best_params": best_params or model.get_params(),
         "selected_threshold": selected_threshold,
-        "threshold_selection": "best F1 with recall >= 0.95 when available",
+        "threshold_selection": (
+            "selected on validation data before final testing; preferred recall >= 0.92 "
+            "with false-positive rate <= 0.03 and strongest precision, otherwise best validation F1 under a high-recall constraint"
+        ),
+        "validation_thresholds": validation_thresholds,
+        "validation_metrics_at_selected_threshold": selected,
+        "final_test_metrics": threshold_metrics(y_test, probabilities, selected_threshold),
         "feature_importance": feature_importance[:15],
         "training_seconds": training_seconds,
         "prediction_ms_per_url": prediction_ms_per_url,
-        "accuracy": round(float(accuracy_score(y_test, predictions)), 4),
-        "precision": round(float(precision_score(y_test, predictions, zero_division=0)), 4),
-        "recall": round(float(recall_score(y_test, predictions, zero_division=0)), 4),
-        "f1_score": round(float(f1_score(y_test, predictions, zero_division=0)), 4),
+        "accuracy": round(float(accuracy_score(y_test, predictions)), 6),
+        "precision": round(float(precision_score(y_test, predictions, zero_division=0)), 6),
+        "recall": round(float(recall_score(y_test, predictions, zero_division=0)), 6),
+        "f1_score": round(float(f1_score(y_test, predictions, zero_division=0)), 6),
+        "false_positive_rate": round(float(fp / max(fp + tn, 1)), 6),
+        "false_negative_rate": round(float(fn / max(fn + tp, 1)), 6),
+        "roc_auc": round(roc_auc, 6),
+        "pr_auc": round(pr_auc, 6),
         "cv_f1_mean": round(float(cv_scores.mean()), 4),
-        "confusion_matrix": confusion_matrix(y_test, predictions).tolist(),
+        "confusion_matrix": test_matrix,
         "classification_report": classification_report(y_test, predictions, zero_division=0),
     }
 

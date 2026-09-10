@@ -2,9 +2,11 @@
 
 PhishGuard is a phishing website detection platform powered by XGBoost. It provides this real-time scan workflow:
 
-URL Input -> Feature Extraction -> XGBoost Prediction -> SHAP Explanation -> Result Dashboard
+URL Input -> Feature Extraction -> XGBoost Prediction -> Risk Rules and Threat Feed -> Explanation Factors -> Result Dashboard
 
-The current interface is designed as a premium cybersecurity SaaS product: dark glass panels, hero-first URL scanning, animated threat visuals, instant risk cards, model evidence, and dashboard analytics. The UI does not mention FYP, coursework, university, or academic project wording.
+SHAP is optional and disabled by default. Without SHAP, explanation factors are heuristic indicators, not SHAP values. The displayed risk/confidence includes runtime rules and is not a calibrated model probability.
+
+The current interface is designed as a premium cybersecurity SaaS product: dark glass panels, hero-first URL scanning, animated threat visuals, instant risk cards, model evidence, and dashboard analytics.
 
 ## Stack
 
@@ -37,7 +39,7 @@ The current interface is designed as a premium cybersecurity SaaS product: dark 
 backend/app/                  FastAPI application, database, API, prediction service
 backend/app/services/         URL feature engineering and XGBoost prediction logic
 backend/ml/train.py           XGBoost training pipeline
-backend/ml/data/              Optional real training CSV files
+backend/ml/data/              Included training CSVs and local threat-feed snapshots
 backend/ml/artifacts/         Saved model, scaler, columns, and metrics
 frontend/src/                 React + Tailwind user interface
 tests/                        Backend feature and API tests
@@ -47,7 +49,23 @@ docker-compose.yml            App + PostgreSQL deployment
 
 ## Run Locally
 
-Double-click:
+From the extracted project folder, install Python 3.11 dependencies once:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+Start from PowerShell using the installed environment:
+
+```powershell
+$env:PYTHONPATH=(Get-Location).Path
+.\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+```
+
+The included `frontend/dist` is served by FastAPI; Node.js is only needed to rebuild the frontend. To rebuild, run `npm.cmd ci` and `npm.cmd run build` from `frontend/`.
+
+Alternatively, if the `python` command already has the required packages installed, double-click:
 
 ```text
 run_windows.bat
@@ -64,6 +82,21 @@ API docs:
 ```text
 http://127.0.0.1:8000/docs
 ```
+
+## Verification and Evidence
+
+Run tests from the project folder with the same Python environment:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install httpx
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+`httpx` is required by FastAPI TestClient but is not listed in the current requirements file.
+
+The final saved model uses `backend/ml/artifacts/metrics.json` (threshold 0.48; final test size 60,231). `error_analysis.json` is historical evidence from an earlier model (threshold 0.38; test size 60,933), not the final model evaluation. `FINAL_MODEL_REPORT.md` contains several chronological runs; use its last final-retraining section for the final results. External-validation results are documented, but the external collector and per-URL result files are not included in this source package.
+
+This ZIP-style submission includes CSV datasets and the frontend build. Both are ignored by Git, so a Git-only export will not contain the same files.
 
 ## Train Demo Model
 
@@ -118,21 +151,31 @@ Current checked-in local training status:
 
 ```text
 mode: real
-sources: Phishing.Database 789,052 rows + OpenPhish 300 rows + legitimate URL dataset 50,000 rows
-training/evaluation sample: 99,994 balanced URLs
-split: 80:20 stratified
-cross_validation_folds: 3
-feature_count: 63
-selected_threshold: 0.24
-accuracy: 0.9287
-precision: 0.9095
-recall: 0.9523
-f1_score: 0.9304
-cv_f1_mean: 0.9382
-prediction_ms_per_url: 0.0015
-confusion_matrix: [[9052, 948], [477, 9522]]
+sources: Phishing.Database 789,052 rows + OpenPhish 300 rows + legitimate URL dataset 200,000 rows + legitimate hard negatives 37 rows + broad legitimate hard negatives 8,702 rows + targeted external hard negatives 542 rows + targeted missed phishing 20 rows
+cleaned rows before balancing: 997,787
+balanced training/evaluation dataset: 418,540 URLs
+split: hostname-grouped 70:15:15 with zero host overlap across train/validation/test
+training size: 295,441
+validation size: 62,868
+final test size: 60,231
+feature_count: 73
+selected_threshold: 0.48, selected on validation data only
+accuracy: 0.942970
+precision: 0.976079
+recall: 0.908307
+f1_score: 0.940974
+false_positive_rate: 0.022302
+false_negative_rate: 0.091693
+roc_auc: 0.982870
+pr_auc: 0.986487
+confusion_matrix: [[29416, 671], [2764, 27380]]
 ```
 
+Full final model report:
+
+```text
+FINAL_MODEL_REPORT.md
+```
 Phishing recall is intentionally prioritized because false negatives are dangerous in phishing detection. PhishTank download support is implemented, but the public feed can return HTTP 429 rate limiting without an application key. To train with as much PhishTank data as possible, register a PhishTank application key, set it before training, and run:
 
 ```powershell
@@ -176,6 +219,7 @@ DATABASE_URL=postgresql+psycopg2://phishguard:phishguard_password@postgres:5432/
 ENABLE_SHAP=false
 ENABLE_NETWORK_INTEL=false
 ENABLE_SHORTENER_EXPANSION=false
+ENABLE_THREAT_FEED_LOOKUP=true
 URL_RESOLVE_TIMEOUT_SECONDS=1.5
 CORS_ORIGINS=http://127.0.0.1:8000,http://localhost:8000
 PHISHTANK_APP_KEY=optional_phishtank_application_key
@@ -184,11 +228,13 @@ PHISHTANK_APP_KEY=optional_phishtank_application_key
 `ENABLE_NETWORK_INTEL=true` enables live DNS/WHOIS checks. Keep it disabled for the fastest scan response.
 `ENABLE_SHORTENER_EXPANSION=true` enables live redirect expansion for known shorteners with SSRF checks, redirect depth limit, and timeout. It is disabled by default locally so scans remain instant even when external network calls are blocked or slow.
 
-## FYP2 Report Notes To Highlight
+## Report Notes To Highlight
 
 - The platform was upgraded from a basic detector into a deployable cybersecurity SaaS-style product.
-- XGBoost remains the primary prediction engine and the selected threshold prioritizes phishing recall.
-- The current model was trained and evaluated on 99,994 balanced URLs using 789,052 raw Phishing.Database URLs, 300 OpenPhish URLs, and 50,000 legitimate URLs.
-- The feature set increased to 63 engineered signals, including shortened URL, redirect, obfuscation, punycode, Unicode/homoglyph, suspicious TLD, brand impersonation, and encoded URL features.
-- The system exposes model evidence directly in the UI: dataset size, source list, metrics, confusion matrix, and feature importance.
-- Practical safety controls were added: input validation, rate limiting, security headers, scan history management, and report export.
+- XGBoost remains the primary prediction engine and the selected threshold prioritizes phishing recall while reducing legitimate false positives.
+- The current checked-in model was trained and evaluated on 418,540 balanced URLs after cleaning 998,653 raw rows from Phishing.Database, OpenPhish, a legitimate URL dataset, hard legitimate negatives, broad legitimate hard negatives, and targeted external error samples.
+- PhishTank, UCI, and Kaggle import support is implemented, but those datasets were not included in this saved training run because no local files/API access were available.
+- The feature set contains 73 engineered signals, including shortened URL, redirect, obfuscation, punycode, Unicode/homoglyph, suspicious TLD, brand impersonation, known-platform context, and encoded URL features.
+- Threat-feed exact URL matches strongly increase risk. Domain-only feed matches on shared reputable platforms are treated as contextual evidence instead of automatic phishing verdicts.
+- The system exposes model evidence directly in the UI: dataset size, source list, metrics, confusion matrix, threshold, and feature importance.
+- Practical safety controls were added: input validation, private-network blocking, rate limiting, security headers, scan history management, and report export.

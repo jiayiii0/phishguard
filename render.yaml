@@ -17,5 +17,3 @@ services:
         value: "false"
       - key: ENABLE_SHAP
         value: "false"
-      - key: DATABASE_URL
-        sync: false

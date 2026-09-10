@@ -33,6 +33,7 @@ BRANDS = {
     "paypal", "google", "facebook", "microsoft", "apple", "amazon", "netflix",
     "maybank", "cimb", "rhb", "tng", "touchngo", "shopee", "lazada",
     "instagram", "whatsapp", "telegram", "bankislam", "publicbank", "adobe",
+    "github", "zoom", "canva", "dropbox", "cloudflare", "linkedin",
 }
 
 SHORTENERS = {
@@ -44,6 +45,36 @@ SHORTENERS = {
 SUSPICIOUS_TLDS = {
     "zip", "mov", "click", "top", "xyz", "icu", "cyou", "buzz", "tk", "ml",
     "ga", "gq", "cf", "work", "support", "rest", "cam", "quest",
+}
+
+KNOWN_PLATFORM_DOMAINS = {
+    "google.com", "google.com.my", "forms.gle", "microsoft.com", "microsoftonline.com",
+    "live.com", "office.com", "sharepoint.com", "onedrive.com", "apple.com",
+    "icloud.com", "amazon.com", "paypal.com", "github.com", "github.io",
+    "zoom.us", "canva.com", "dropbox.com", "cloudflare.com", "linkedin.com",
+    "maybank2u.com.my", "maybank.com", "cimb.com.my", "publicbank.com.my",
+    "pbebank.com", "touchngo.com.my", "shopee.com.my", "lazada.com.my",
+    "utar.edu.my",
+}
+
+SHARED_HOSTING_DOMAINS = {
+    "github.io", "pages.dev", "netlify.app", "vercel.app", "web.app",
+    "firebaseapp.com", "blogspot.com", "wixsite.com", "wordpress.com",
+}
+
+DOCUMENTATION_HOST_TOKENS = {
+    "docs", "doc", "developer", "developers", "learn", "support", "help",
+    "api", "reference", "guides", "developer-docs",
+}
+
+EDUCATION_GOV_SUFFIXES = {
+    "edu", "gov", "edu.my", "gov.my", "ac.uk", "gov.uk", "edu.au",
+    "gc.ca", "gouv.fr", "gov.sg", "edu.sg",
+}
+
+MULTI_LABEL_SUFFIXES = {
+    "com.my", "edu.my", "gov.my", "net.my", "org.my", "co.uk", "com.au",
+    "com.br", "co.in", "co.jp", "com.sg",
 }
 
 
@@ -105,7 +136,7 @@ def canonicalize_url(url: str) -> str:
 
 def hostname_from_url(url: str) -> str:
     try:
-        return urlparse(url).netloc.lower().split("@")[-1].split(":")[0]
+        return (urlparse(url).hostname or "").lower()
     except Exception:
         return ""
 
@@ -140,6 +171,47 @@ def domain_parts(hostname: str) -> tuple[str, str]:
     if len(parts) < 2:
         return hostname, ""
     return parts[-2], parts[-1]
+
+
+def registered_domain_from_hostname(hostname: str) -> str:
+    hostname = (hostname or "").lower().strip(".")
+    if not hostname or has_ip_address(hostname):
+        return hostname
+    parts = [part for part in hostname.split(".") if part]
+    if len(parts) < 2:
+        return hostname
+    suffix = ".".join(parts[-2:])
+    if suffix in MULTI_LABEL_SUFFIXES and len(parts) >= 3:
+        return ".".join(parts[-3:])
+    return suffix
+
+
+def is_shared_hosting_hostname(hostname: str) -> int:
+    registered_domain = registered_domain_from_hostname(hostname)
+    return int(registered_domain in SHARED_HOSTING_DOMAINS)
+
+
+def is_known_platform_hostname(hostname: str) -> int:
+    registered_domain = registered_domain_from_hostname(hostname)
+    if registered_domain in SHARED_HOSTING_DOMAINS:
+        return 0
+    return int(registered_domain in KNOWN_PLATFORM_DOMAINS)
+
+
+def has_documentation_hostname_context(hostname: str) -> int:
+    labels = {part for part in (hostname or "").lower().split(".") if part}
+    return int(bool(labels & DOCUMENTATION_HOST_TOKENS))
+
+
+def has_education_or_government_domain(hostname: str) -> int:
+    hostname = (hostname or "").lower().strip(".")
+    parts = [part for part in hostname.split(".") if part]
+    if not parts:
+        return 0
+    suffixes = {parts[-1]}
+    if len(parts) >= 2:
+        suffixes.add(".".join(parts[-2:]))
+    return int(bool(suffixes & EDUCATION_GOV_SUFFIXES))
 
 
 def decode_punycode_hostname(hostname: str) -> str:
@@ -396,6 +468,7 @@ def extract_features(
     decoded_hostname = preprocessed.decoded_domain or decode_punycode_hostname(hostname)
     domain, tld = domain_parts(hostname)
     decoded_domain, _ = domain_parts(decoded_hostname)
+    registered_domain = registered_domain_from_hostname(hostname)
     lower_url = normalized.lower()
     original_lower = preprocessed.original_url.lower()
     decoded_original = unquote(preprocessed.original_url)
@@ -405,10 +478,29 @@ def extract_features(
     letters = sum(ch.isalpha() for ch in normalized)
     special = sum(not ch.isalnum() for ch in normalized)
     suspicious_count = sum(1 for word in SUSPICIOUS_WORDS if word in lower_url)
-    brand = brand_analysis(normalized, decoded_domain or domain, decoded_hostname)
+    brand_domain = decoded_domain or domain
+    if registered_domain in SHARED_HOSTING_DOMAINS:
+        host_parts = [part for part in decoded_hostname.split(".") if part]
+        registered_parts = [part for part in registered_domain.split(".") if part]
+        if len(host_parts) > len(registered_parts):
+            brand_domain = host_parts[-len(registered_parts) - 1]
+    brand = brand_analysis(normalized, brand_domain, decoded_hostname)
     brand_impersonation = int(brand["brand_impersonation"])
     typosquat = int(brand["typosquatting_similarity"])
-    embedded_url_count = max(len(re.findall(r"https?://", decoded_original, flags=re.IGNORECASE)) - 1, 0)
+    embedded_starts = [match.start() for match in re.finditer(r"https?://", decoded_original, flags=re.IGNORECASE)]
+    embedded_urls = [decoded_original[start:] for start in embedded_starts[1:]]
+    embedded_url_count = len(embedded_urls)
+    embedded_external_count = 0
+    embedded_same_registered_domain = 0
+    for embedded_url in embedded_urls:
+        embedded_host = hostname_from_url(embedded_url)
+        if not embedded_host:
+            continue
+        embedded_registered = registered_domain_from_hostname(embedded_host)
+        if embedded_registered and embedded_registered == registered_domain:
+            embedded_same_registered_domain += 1
+        else:
+            embedded_external_count += 1
     long_random_string_count = sum(
         1
         for token in re.findall(r"[A-Za-z0-9]{18,}", decoded_original)
@@ -443,10 +535,32 @@ def extract_features(
         int("xn--" in hostname),
     ]
     obfuscation_score = round(min(sum(obfuscation_flags) / max(len(obfuscation_flags), 1), 1.0), 4)
+    is_shared_hosting = is_shared_hosting_hostname(hostname)
+    is_known_platform = is_known_platform_hostname(hostname)
+    documentation_context = has_documentation_hostname_context(hostname)
+    education_gov_context = has_education_or_government_domain(hostname)
+    safe_structured_context = int(
+        parsed.scheme == "https"
+        and (documentation_context or education_gov_context)
+        and not has_ip_address(hostname)
+        and "xn--" not in hostname
+        and not brand_impersonation
+        and not has_at_symbol_abuse
+        and embedded_external_count == 0
+        and tld not in SUSPICIOUS_TLDS
+        and obfuscation_score <= 0.25
+    )
+    brand_matches_registered_domain = int(is_known_platform and bool(brand["brand_keyword_detected"]) and not brand_impersonation)
+    credential_terms_on_unrelated_domain = int(
+        suspicious_count > 0
+        and bool(brand["brand_keyword_detected"])
+        and not brand_matches_registered_domain
+    )
 
     features: dict[str, float | int] = {
         "url_length": len(normalized),
         "hostname_length": len(hostname),
+        "registered_domain_length": len(registered_domain),
         "path_length": len(parsed.path or ""),
         "query_length": len(parsed.query or ""),
         "count_dot": normalized.count("."),
@@ -484,6 +598,13 @@ def extract_features(
         "brand_impersonation": brand_impersonation,
         "typosquatting_similarity": typosquat,
         "brand_keyword_detected": int(brand["brand_keyword_detected"]),
+        "brand_matches_registered_domain": brand_matches_registered_domain,
+        "known_platform_domain": is_known_platform,
+        "shared_hosting_domain": is_shared_hosting,
+        "documentation_hostname_context": documentation_context,
+        "education_or_government_domain": education_gov_context,
+        "safe_structured_context": safe_structured_context,
+        "credential_terms_on_unrelated_domain": credential_terms_on_unrelated_domain,
         "domain_similarity_score": float(brand["domain_similarity_score"]),
         "brand_impersonation_score": float(brand["brand_impersonation_score"]),
         "has_encoded_chars": int(preprocessed.encoded_characters_detected or any(token in original_lower for token in ("%2f", "%3d", "%40", "%2e"))),
@@ -492,6 +613,8 @@ def extract_features(
         "multiple_consecutive_slashes": multiple_consecutive_slashes,
         "excessive_hyphens": excessive_hyphens,
         "embedded_url_count": embedded_url_count,
+        "embedded_external_url_count": embedded_external_count,
+        "embedded_same_registered_domain_count": embedded_same_registered_domain,
         "has_hex_encoding": has_hex_encoding,
         "has_unicode_escape": has_unicode_escape,
         "long_random_string_count": long_random_string_count,
@@ -529,6 +652,7 @@ def explain_indicators(features: dict[str, float | int]) -> list[str]:
         ("homoglyph_detected", "Unicode or homoglyph characters resemble a trusted brand"),
         ("typosquatting_similarity", "Domain resembles a known brand name"),
         ("brand_impersonation", "Brand name appears outside the registered domain"),
+        ("credential_terms_on_unrelated_domain", "Credential-related terms appear on a brand-mismatched domain"),
         ("has_suspicious_tld", "Top-level domain is commonly abused in suspicious campaigns"),
         ("has_encoded_chars", "Encoded characters may hide redirects or symbols"),
         ("embedded_url_count", "URL contains an embedded URL inside the path or query"),

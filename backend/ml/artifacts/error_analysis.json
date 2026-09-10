@@ -1,0 +1,243 @@
+{
+  "threshold": 0.38,
+  "final_test_size": 60933,
+  "false_positive_count": 1191,
+  "false_negative_count": 2055,
+  "true_positive_count": 28864,
+  "true_negative_count": 28823,
+  "false_positive_feature_means": {
+    "url_length": 35.7817,
+    "path_length": 0.3409,
+    "query_length": 0.1016,
+    "count_slash": 2.0403,
+    "count_digits": 1.8111,
+    "special_char_ratio": 0.166,
+    "suspicious_word_count": 0.1201,
+    "subdomain_count": 0.9706,
+    "has_https": 1.0,
+    "has_suspicious_tld": 0.0672,
+    "brand_impersonation": 0.026,
+    "known_platform_domain": 0.0134,
+    "brand_matches_registered_domain": 0.0109
+  },
+  "false_negative_feature_means": {
+    "url_length": 29.8642,
+    "path_length": 0.0,
+    "query_length": 0.0,
+    "count_slash": 2.0,
+    "count_digits": 1.0418,
+    "special_char_ratio": 0.1905,
+    "suspicious_word_count": 0.0423,
+    "subdomain_count": 1.001,
+    "has_https": 1.0,
+    "has_suspicious_tld": 0.001,
+    "brand_impersonation": 0.0243,
+    "known_platform_domain": 0.0005,
+    "brand_matches_registered_domain": 0.0005
+  },
+  "true_positive_feature_means": {
+    "url_length": 82.5625,
+    "path_length": 29.0918,
+    "query_length": 20.7722,
+    "count_slash": 4.2541,
+    "count_digits": 12.8569,
+    "special_char_ratio": 0.1545,
+    "suspicious_word_count": 0.365,
+    "subdomain_count": 0.8752,
+    "has_https": 0.7486,
+    "has_suspicious_tld": 0.0801,
+    "brand_impersonation": 0.0625,
+    "known_platform_domain": 0.0208,
+    "brand_matches_registered_domain": 0.0207
+  },
+  "true_negative_feature_means": {
+    "url_length": 34.6902,
+    "path_length": 0.0035,
+    "query_length": 0.0,
+    "count_slash": 2.0003,
+    "count_digits": 2.4555,
+    "special_char_ratio": 0.2085,
+    "suspicious_word_count": 0.0295,
+    "subdomain_count": 1.9952,
+    "has_https": 1.0,
+    "has_suspicious_tld": 0.0001,
+    "brand_impersonation": 0.0784,
+    "known_platform_domain": 0.0363,
+    "brand_matches_registered_domain": 0.0202
+  },
+  "false_positive_samples": [
+    {
+      "url": "https://www.maybank2u.com.my/home/m2u/common/login.do",
+      "label": 0
+    },
+    {
+      "url": "https://canvas-bridge02.tubitv.com",
+      "label": 0
+    },
+    {
+      "url": "https://services-us8.wfs.cloud",
+      "label": 0
+    },
+    {
+      "url": "https://peamsua0101-fza9b2gjf8gcfwds.b01.azurefd.net",
+      "label": 0
+    },
+    {
+      "url": "https://gcp-runtime.getamigo.io",
+      "label": 0
+    },
+    {
+      "url": "https://impression-us-east4.dataseat.tv",
+      "label": 0
+    },
+    {
+      "url": "https://framingartcentregallery.com",
+      "label": 0
+    },
+    {
+      "url": "https://portal.cloudappsecurity.com",
+      "label": 0
+    },
+    {
+      "url": "https://appraisalcenter.ice.com",
+      "label": 0
+    },
+    {
+      "url": "https://surveydatacdn-cf.asklayer.io",
+      "label": 0
+    }
+  ],
+  "false_negative_samples": [
+    {
+      "url": "https://www.tg.mintswave.net",
+      "label": 1
+    },
+    {
+      "url": "https://rpf-speune30.pages.dev",
+      "label": 1
+    },
+    {
+      "url": "https://kcebxnhqrullapcs-dot-the-experience-351319.nn.r.appspot.com",
+      "label": 1
+    },
+    {
+      "url": "https://sparkasse.de-login.digital",
+      "label": 1
+    },
+    {
+      "url": "https://whatsappu525sft.panelllku.art",
+      "label": 1
+    },
+    {
+      "url": "https://storyofnarendramodi.com",
+      "label": 1
+    },
+    {
+      "url": "https://orange-cliente.yolasite.com",
+      "label": 1
+    },
+    {
+      "url": "https://nsisb.godp4y.com",
+      "label": 1
+    },
+    {
+      "url": "https://dlsltzn.com",
+      "label": 1
+    },
+    {
+      "url": "https://videoviral77.jkub.com",
+      "label": 1
+    }
+  ],
+  "hard_legitimate_summary": {
+    "tested": 5,
+    "correctly_classified": 5,
+    "falsely_flagged": 0,
+    "results": [
+      {
+        "url": "https://docs.google.com/forms/u/1/d/e/1FAIpQLSfmkF4oiWVWs_Kiu-5igwc_1iLbbF9itc0DpkLmT4OQTlWXcQ/formResponse",
+        "result": "Safe",
+        "threat_level": "Low Risk",
+        "risk_score": 22,
+        "model_probability": 79.53
+      },
+      {
+        "url": "https://accounts.google.com/signin/v2/identifier?service=mail&continue=https%3A%2F%2Fmail.google.com%2Fmail%2F&flowName=GlifWebSignIn",
+        "result": "Safe",
+        "threat_level": "Low Risk",
+        "risk_score": 22,
+        "model_probability": 2.5
+      },
+      {
+        "url": "https://github.com/login?return_to=%2Fsettings%2Fsecurity",
+        "result": "Safe",
+        "threat_level": "Low Risk",
+        "risk_score": 22,
+        "model_probability": 37.27
+      },
+      {
+        "url": "https://www.paypal.com/my/signin?returnUri=%2Fmyaccount%2Fsummary",
+        "result": "Safe",
+        "threat_level": "Low Risk",
+        "risk_score": 22,
+        "model_probability": 30.51
+      },
+      {
+        "url": "https://support.microsoft.com/en-us/account-billing/reset-a-forgotten-microsoft-account-password-eff4f067-5042-c1a3-fe72-b04d60556c37",
+        "result": "Safe",
+        "threat_level": "Low Risk",
+        "risk_score": 22,
+        "model_probability": 58.21
+      }
+    ]
+  },
+  "hard_suspicious_summary": {
+    "tested": 6,
+    "detected": 6,
+    "missed": 0,
+    "results": [
+      {
+        "url": "http://google-login-security.example.com/account/verify",
+        "result": "Phishing",
+        "threat_level": "Phishing",
+        "risk_score": 100,
+        "model_probability": 99.99
+      },
+      {
+        "url": "http://paypal.com@malicious-login.example/verify",
+        "result": "Phishing",
+        "threat_level": "Phishing",
+        "risk_score": 100,
+        "model_probability": 99.99
+      },
+      {
+        "url": "http://xn--paypa1-login.com/verify",
+        "result": "Phishing",
+        "threat_level": "Phishing",
+        "risk_score": 100,
+        "model_probability": 99.99
+      },
+      {
+        "url": "http://192.0.2.10/paypal/verify-account",
+        "result": "Phishing",
+        "threat_level": "Phishing",
+        "risk_score": 100,
+        "model_probability": 99.99
+      },
+      {
+        "url": "http://microsoft-security-check.xyz/signin",
+        "result": "Phishing",
+        "threat_level": "Phishing",
+        "risk_score": 100,
+        "model_probability": 100.0
+      },
+      {
+        "url": "http://secure-login-maybank2u.top/account",
+        "result": "Phishing",
+        "threat_level": "Phishing",
+        "risk_score": 100,
+        "model_probability": 100.0
+      }
+    ]
+  }
+}

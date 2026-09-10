@@ -1,4 +1,4 @@
-from backend.app.services.features import extract_features, preprocess_url
+from backend.app.services.features import extract_features, hostname_from_url, preprocess_url
 from backend.ml import train as train_module
 
 
@@ -44,6 +44,11 @@ def test_preprocess_decodes_and_canonicalizes_url():
     assert result.normalized_url == "https://example.com/paypal"
     assert result.analysis_url == "https://example.com/paypal"
     assert result.encoded_characters_detected is True
+
+
+def test_hostname_parser_handles_userinfo_ports_and_ipv6():
+    assert hostname_from_url("http://paypal.com@evil.example:8080/login") == "evil.example"
+    assert hostname_from_url("http://[::1]/") == "::1"
 
 
 def test_modern_evasion_features_detect_obfuscation_and_brand_signals():
@@ -142,3 +147,38 @@ def test_real_dataset_default_keeps_all_available_rows(tmp_path, monkeypatch):
     assert len(data) == 7
     assert set(data["label"].astype(int).unique()) == {0, 1}
     assert sources
+
+
+def test_documentation_and_institution_context_features():
+    docs_features = extract_features("https://docs.stripe.com/customer-management/portal-deep-links")
+    gov_features = extract_features("https://www.irs.gov/individuals/get-transcript")
+    university_features = extract_features("https://www.harvard.edu/research/faculty-resources/library-services")
+
+    assert docs_features["documentation_hostname_context"] == 1
+    assert docs_features["safe_structured_context"] == 1
+    assert gov_features["education_or_government_domain"] == 1
+    assert gov_features["safe_structured_context"] == 1
+    assert university_features["education_or_government_domain"] == 1
+    assert university_features["safe_structured_context"] == 1
+
+
+def test_shared_hosting_domain_is_not_known_platform_context():
+    features = extract_features("https://paypal-login-alert.github.io/verify-account")
+
+    assert features["shared_hosting_domain"] == 1
+    assert features["known_platform_domain"] == 0
+    assert features["brand_matches_registered_domain"] == 0
+    assert features["brand_impersonation"] == 1
+
+
+def test_threshold_selection_prefers_lower_false_positive_rate_when_recall_stays_strong():
+    thresholds = [
+        {"threshold": 0.39, "precision": 0.966199, "recall": 0.934637, "f1": 0.950156, "false_positive_rate": 0.033679},
+        {"threshold": 0.44, "precision": 0.973812, "recall": 0.926738, "f1": 0.949692, "false_positive_rate": 0.025671},
+        {"threshold": 0.48, "precision": 0.979314, "recall": 0.920154, "f1": 0.948813, "false_positive_rate": 0.020020},
+        {"threshold": 0.50, "precision": 0.981242, "recall": 0.916706, "f1": 0.947877, "false_positive_rate": 0.018050},
+    ]
+
+    selected = train_module.select_threshold(thresholds)
+
+    assert selected["threshold"] == 0.48

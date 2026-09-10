@@ -20,3 +20,6 @@ backend/ml/data/*.zip
 venv
 .venv
 env
+offline_test
+wheelhouse
+DemoDataSet.txt

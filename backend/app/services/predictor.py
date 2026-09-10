@@ -25,6 +25,57 @@ def threat_level(score: int, is_phishing: bool) -> str:
     return "Safe"
 
 
+def contextual_risk_adjustment(
+    combined_probability: float,
+    features: dict[str, Any],
+    threat_feed_matched: bool,
+) -> tuple[float, list[str]]:
+    """Reduce URL-only false positives on reputable platforms without whitelisting them."""
+    signals: list[str] = []
+    if int(features.get("known_platform_domain", 0)) == 1:
+        signals.append("Known platform domain detected")
+    if int(features.get("brand_matches_registered_domain", 0)) == 1:
+        signals.append("Brand appears on its own registered domain")
+    if int(features.get("embedded_same_registered_domain_count", 0)) > 0:
+        signals.append("Embedded URL stays within the same registered domain")
+
+    if threat_feed_matched:
+        return combined_probability, signals
+
+    severe_flags = [
+        "has_ip",
+        "has_punycode",
+        "homoglyph_detected",
+        "has_suspicious_tld",
+        "brand_impersonation",
+        "credential_terms_on_unrelated_domain",
+        "final_domain_differs",
+        "has_at_symbol_abuse",
+        "embedded_external_url_count",
+        "redirect_loop_detected",
+    ]
+    has_severe_signal = any(float(features.get(flag, 0)) > 0 for flag in severe_flags)
+    clean_known_platform = (
+        int(features.get("known_platform_domain", 0)) == 1
+        and int(features.get("brand_matches_registered_domain", 0)) == 1
+        and int(features.get("has_https", 0)) == 1
+        and not has_severe_signal
+    )
+
+    if not clean_known_platform:
+        return combined_probability, signals
+
+    length_only_or_same_domain_flow = (
+        int(features.get("suspicious_word_count", 0)) <= 4
+        and float(features.get("obfuscation_score", 0)) <= 0.25
+        and int(features.get("embedded_external_url_count", 0)) == 0
+    )
+    if length_only_or_same_domain_flow and combined_probability > 0.22:
+        signals.append("Risk reduced because the URL is a clean known-platform flow, not a brand-mismatched domain")
+        return 0.22, signals
+    return combined_probability, signals
+
+
 class PhishGuardPredictor:
     def __init__(self) -> None:
         self.settings = get_settings()
@@ -137,9 +188,14 @@ class PhishGuardPredictor:
                 timeout=float(self.settings.url_resolve_timeout_seconds),
             )
         feed_match_type = str(threat_feed.get("match_type") or "").lower()
-        features["known_threat_feed_match"] = int(bool(threat_feed.get("matched")))
-        features["known_threat_feed_url_match"] = int(feed_match_type == "url")
-        features["known_threat_feed_domain_match"] = int(feed_match_type == "domain")
+        threat_feed_matched = bool(threat_feed.get("matched"))
+        feed_url_match = threat_feed_matched and feed_match_type == "url"
+        feed_domain_match = threat_feed_matched and feed_match_type == "domain"
+        domain_match_on_known_platform = feed_domain_match and int(features.get("known_platform_domain", 0)) == 1
+        authoritative_threat_feed_match = threat_feed_matched and not domain_match_on_known_platform
+        features["known_threat_feed_match"] = int(threat_feed_matched)
+        features["known_threat_feed_url_match"] = int(feed_url_match)
+        features["known_threat_feed_domain_match"] = int(feed_domain_match)
         frame, scaled = self._vectorize(features)
 
         probability = self.model.predict_proba(scaled)[0]
@@ -167,13 +223,18 @@ class PhishGuardPredictor:
             indicator_weight += 0.08
         indicator_probability = min(indicator_weight, 0.96)
         combined_probability = max(phishing_probability, indicator_probability)
-        if threat_feed.get("matched"):
+        if authoritative_threat_feed_match:
             combined_probability = max(combined_probability, 0.98)
             source = str(threat_feed.get("source") or "public threat feed")
-            match_type = "URL" if feed_match_type == "url" else "domain"
+            match_type = "URL" if feed_url_match else "domain"
             feed_indicator = f"Known phishing feed match: {source} {match_type}"
             if feed_indicator not in indicators:
                 indicators.insert(0, feed_indicator)
+        combined_probability, contextual_signals = contextual_risk_adjustment(
+            combined_probability,
+            features,
+            authoritative_threat_feed_match,
+        )
         is_phishing = combined_probability >= model_threshold
         confidence = combined_probability if is_phishing else max(float(probability[0]), 1 - combined_probability)
         risk_score = int(round(combined_probability * 100))
@@ -190,7 +251,7 @@ class PhishGuardPredictor:
             "final_destination": preprocessed.final_destination_domain,
             "evasion_techniques": (
                 ["threat_feed_match", *preprocessed.evasion_techniques]
-                if threat_feed.get("matched")
+                if authoritative_threat_feed_match
                 else preprocessed.evasion_techniques
             ),
             "hostname": hostname,
@@ -199,6 +260,12 @@ class PhishGuardPredictor:
             "threat_level": threat_level(risk_score, bool(is_phishing)),
             "risk_score": risk_score,
             "confidence": round(confidence * 100, 2),
+            "model_probability": round(phishing_probability * 100, 2),
+            "model_threshold": round(model_threshold, 4),
+            "contextual_signals": contextual_signals,
+            "threat_feed_matched": bool(threat_feed.get("matched")),
+            "threat_feed_status": str(threat_feed.get("status") or "disabled"),
+            "threat_feed_source": str(threat_feed.get("source") or ""),
             "indicators": indicators,
             "shap_factors": self._shap_factors(frame, scaled, features),
             "features": features,

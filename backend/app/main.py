@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from .api import router
 from .config import BASE_DIR, get_settings
 from .database import init_db
+from .services.threat_feed import warm_threat_feed_cache
 
 
 settings = get_settings()
@@ -19,6 +20,8 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    if settings.enable_threat_feed_lookup:
+        warm_threat_feed_cache(timeout=float(settings.url_resolve_timeout_seconds))
     yield
 
 

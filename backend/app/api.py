@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ipaddress
+import re
 from urllib.parse import urlparse
 from pathlib import Path
 
@@ -38,10 +39,13 @@ def model_metrics() -> dict:
 
 
 def validate_public_url(raw_url: str) -> None:
-    lowered = (raw_url or "").strip().lower()
+    cleaned = (raw_url or "").strip()
+    if re.search(r"\s", cleaned):
+        raise HTTPException(status_code=400, detail="URL cannot contain spaces or control characters.")
+    lowered = cleaned.lower()
     if lowered.startswith(("file://", "ftp://", "javascript:", "data:")):
         raise HTTPException(status_code=400, detail="Only public HTTP and HTTPS URLs can be scanned.")
-    parsed = urlparse(normalize_url(raw_url))
+    parsed = urlparse(normalize_url(cleaned))
     if parsed.scheme not in {"http", "https"}:
         raise HTTPException(status_code=400, detail="Only HTTP and HTTPS URLs can be scanned.")
     hostname = (parsed.hostname or "").strip().lower()

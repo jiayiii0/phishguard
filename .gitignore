@@ -7,11 +7,14 @@ __pycache__/
 .venv/
 venv/
 env/
+offline_test/
+wheelhouse/
 
 # Local runtime data
 *.db
 *.sqlite
 *.sqlite3
+DemoDataSet.txt
 
 # Raw training datasets can be large and may contain live phishing URLs.
 backend/ml/data/*.csv
